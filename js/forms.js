@@ -35,7 +35,10 @@
     } else if (f.type === "number" || f.type === "money") {
       input = `<input type="number" step="${f.step || "any"}" data-k="${f.key}" value="${val}" placeholder="${f.placeholder || ""}">`;
     } else {
-      input = `<input type="text" data-k="${f.key}" value="${val != null ? String(val).replace(/"/g, "&quot;") : ""}" placeholder="${f.placeholder || ""}">`;
+      const hasDl = f.datalist && f.datalist.length;
+      const lst = hasDl ? ` list="dl_${f.key}"` : "";
+      const dlEl = hasDl ? `<datalist id="dl_${f.key}">${f.datalist.map(o => `<option value="${String(o).replace(/"/g, "&quot;")}"></option>`).join("")}</datalist>` : "";
+      input = `<input type="text" data-k="${f.key}"${lst} value="${val != null ? String(val).replace(/"/g, "&quot;") : ""}" placeholder="${f.placeholder || ""}">${dlEl}`;
     }
     return `<div class="field ${f.full ? "full" : ""}"><label>${f.label}${req}</label>${input}
       ${f.hint ? `<div class="hint">${f.hint}</div>` : ""}${f.calc ? `<div class="calc" data-calc="${f.key}"></div>` : ""}</div>`;

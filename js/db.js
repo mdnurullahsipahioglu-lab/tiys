@@ -53,7 +53,7 @@
     if (!localStorage.getItem(KEY)) save();
     return _data;
   }
-  function save() { try { localStorage.setItem(KEY, JSON.stringify(_data)); } catch (e) {} }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(_data)); } catch (e) {} try { global.dispatchEvent(new CustomEvent("tiys:save")); } catch (e) {} }
   function reset() { _data = seed(); save(); return _data; }
 
   // ---- CRUD yardımcıları ---------------------------------------------------
@@ -136,8 +136,9 @@
      ["2026-11-10", 110000, "Aşağı Tarla satışı"], ["2026-11-26", 100000, "Dere Kenarı + Tepe Üstü satışı"],
      ["2026-12-12", 95000, "Bağ Yolu + Kavak Altı satışı"], ["2026-12-24", 172600, "Söğütlük + Harman Yeri + kalan satış"]
     ].forEach(r => g("hasat", r[0], r[1], r[2]));
-    // İşçi kiralama geliri ~125.000
-    [["2026-06-12", 60000, "İşçi ekibi kiralama"], ["2026-07-10", 65000, "Tırpan ekibi kiralama"]].forEach(r => g("isciKiralama", r[0], r[1], r[2]));
+    // İşçi kiralama tahsilatları — müşterilerin ödemeleri (gelir olarak işlenir)
+    [["2026-06-15", "Ahmet A.", 40500], ["2026-06-20", "Mehmet B.", 18000], ["2026-06-22", "Hasan C.", 25000], ["2026-06-25", "Veli E.", 15000]]
+      .forEach(r => gelirler.push({ id: uid(), tur: "isciKiralama", tarih: r[0], tutar: r[2], musteri: r[1], aciklama: "Tahsilat — " + r[1] }));
     // Ev kira ~62.500
     for (let m = 0; m < 12; m++) g("evKira", `2026-${String(m + 1).padStart(2, "0")}-05`, 5200, "Aylık ev kirası");
 
@@ -172,13 +173,13 @@
       { id: uid(), baslik: "Hasat Başlangıcı", tarih: "2026-08-10T07:00", durum: "planli" }
     ];
 
-    // Son işçi kiralamalar
+    // İşçi kiralamalar — hakediş = işçi × gün × yevmiye (2026 yevmiye: ₺900)
     const isciKiralamalar = [
-      { id: uid(), tarih: "2026-06-12", kisi: 15, tutar: 4000, musteri: "Ahmet A." },
-      { id: uid(), tarih: "2026-06-10", kisi: 10, tutar: 4000, musteri: "Mehmet B." },
-      { id: uid(), tarih: "2026-06-08", kisi: 12, tutar: 5000, musteri: "Hasan C." },
-      { id: uid(), tarih: "2026-06-05", kisi: 18, tutar: 7200, musteri: "Ali D." },
-      { id: uid(), tarih: "2026-06-01", kisi: 20, tutar: 8000, musteri: "Veli E." }
+      { id: uid(), tarih: "2026-06-12", musteri: "Ahmet A.", kisi: 15, gun: 3, yevmiye: 900, tutar: 40500 },
+      { id: uid(), tarih: "2026-06-10", musteri: "Mehmet B.", kisi: 10, gun: 2, yevmiye: 900, tutar: 18000 },
+      { id: uid(), tarih: "2026-06-08", musteri: "Hasan C.", kisi: 12, gun: 4, yevmiye: 900, tutar: 43200 },
+      { id: uid(), tarih: "2026-06-05", musteri: "Ali D.", kisi: 18, gun: 2, yevmiye: 900, tutar: 32400 },
+      { id: uid(), tarih: "2026-06-01", musteri: "Veli E.", kisi: 20, gun: 1, yevmiye: 900, tutar: 18000 }
     ];
 
     return {
@@ -188,11 +189,41 @@
         gelistirici: "Rıfat Sipahioğlu", iletisim: "rsipahi@gmail.com",
         gubreFiyat: 450, iscilikFiyat: 900, mazotFiyat: 42,
         urunFiyat: { findik: 250, zeytin: 40, ceviz: 130, narenciye: 18, uzum: 30, tibbi: 90 },
+        yevmiyeler: { "2026": 900 },
         hasatTarihi: "2026-08-10", konum: { lat: 40.985, lng: 36.742, ad: "Merkez" }
       },
       tarlalar, gelirler, giderler, isler, isciKiralamalar,
       isTakip: [], puantaj: [], hasatlar: [], aktifIsci: 34
     };
+  }
+
+  // ---- İşçi kiralama / müşteri borç hanesi ---------------------------------
+  function yevmiyeFor(yil) {
+    const a = load().ayarlar, y = a.yevmiyeler || {};
+    return y[String(yil)] != null ? y[String(yil)] : (a.iscilikFiyat || 0);
+  }
+  function setYevmiye(yil, val) {
+    const d = load(); d.ayarlar.yevmiyeler = d.ayarlar.yevmiyeler || {};
+    d.ayarlar.yevmiyeler[String(yil)] = Number(val) || 0; save();
+  }
+  // Tahsilatlar = işçi kiralama gelirleri (müşteri ödemeleri)
+  function tahsilatlar() { return coll("gelirler").filter(g => g.tur === "isciKiralama"); }
+  function musteriList() {
+    const s = new Set();
+    coll("isciKiralamalar").forEach(k => { if (k.musteri) s.add(String(k.musteri).trim()); });
+    tahsilatlar().forEach(t => { if (t.musteri) s.add(String(t.musteri).trim()); });
+    return [...s].sort();
+  }
+  // Müşteri bazlı borç hanesi: hakediş (kiralama) − tahsil (ödeme) = kalan borç
+  function musteriOzet() {
+    const map = {};
+    const ensure = m => (map[m] = map[m] || { musteri: m, hakedis: 0, tahsil: 0, isciGun: 0, kiraSayi: 0 });
+    coll("isciKiralamalar").forEach(k => {
+      const o = ensure(String(k.musteri || "—").trim());
+      o.hakedis += Number(k.tutar) || 0; o.isciGun += (Number(k.kisi) || 0) * (Number(k.gun) || 0); o.kiraSayi++;
+    });
+    tahsilatlar().forEach(t => { ensure(String(t.musteri || "—").trim()).tahsil += Number(t.tutar) || 0; });
+    return Object.values(map).map(o => Object.assign(o, { kalan: o.hakedis - o.tahsil })).sort((a, b) => b.kalan - a.kalan);
   }
 
   // ---- Dışa aç -------------------------------------------------------------
@@ -202,6 +233,7 @@
     toplamGelir, toplamGider, netKar, toplamDekar,
     giderDagilimi, gelirDagilimi, aylikTrend, tarlaVerimSirasi,
     exportJSON, importJSON,
-    URUNLER, urun, urunFiyat, aktifUrunler, urunOptions
+    URUNLER, urun, urunFiyat, aktifUrunler, urunOptions,
+    yevmiyeFor, setYevmiye, tahsilatlar, musteriList, musteriOzet
   };
 })(window);

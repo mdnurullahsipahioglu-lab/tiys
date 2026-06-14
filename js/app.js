@@ -102,7 +102,7 @@
     "/dashboard": { title: "Dashboard", render: v => Dashboard.render(v) },
 
     "/gelir-hasat": { title: "Hasat Geliri", render: crud({ coll: "gelirler", title: "Hasat Geliri", icon: "🌾", addLabel: "Hasat Geliri Ekle", totalLabel: "Toplam Hasat Geliri", defaults: { tur: "hasat" }, filter: g => g.tur === "hasat", fields: gelirFields, total: r => r.reduce((a, x) => a + (x.tutar || 0), 0), cols: [{ h: "Tarih", v: r => dt(r.tarih) }, { h: "Tarla", v: r => (D.coll("tarlalar").find(t => t.id === r.tarlaId) || {}).ad || "—" }, { h: "Açıklama", v: r => r.aciklama || "—" }, { h: "Tutar", v: r => D.money(r.tutar) }] }) },
-    "/gelir-kiralama": { title: "İşçi Kiralama Geliri", render: crud({ coll: "gelirler", title: "İşçi Kiralama Geliri", icon: "👷", addLabel: "Gelir Ekle", totalLabel: "Toplam", defaults: { tur: "isciKiralama" }, filter: g => g.tur === "isciKiralama", fields: gelirFields, total: r => r.reduce((a, x) => a + (x.tutar || 0), 0), cols: [{ h: "Tarih", v: r => dt(r.tarih) }, { h: "Açıklama", v: r => r.aciklama || "—" }, { h: "Tutar", v: r => D.money(r.tutar) }] }) },
+    "/gelir-kiralama": { title: "İşçi Kiralama Geliri", render: crud({ coll: "gelirler", title: "İşçi Kiralama Geliri", icon: "👷", addLabel: "Tahsilat Ekle", lead: "Müşterilerden alınan işçilik ödemeleri — detaylı borç takibi: İşçi Kiralama sayfası", totalLabel: "Tahsil Edilen", defaults: { tur: "isciKiralama" }, filter: g => g.tur === "isciKiralama", fields: () => [{ key: "tarih", label: "Tarih", type: "date", required: true }, { key: "musteri", label: "Müşteri", type: "text", datalist: D.musteriList(), placeholder: "Ad Soyad" }, { key: "tutar", label: "Alınan Tutar (₺)", type: "money", required: true }, { key: "aciklama", label: "Not", type: "text", full: true, placeholder: "nakit / havale" }], total: r => r.reduce((a, x) => a + (x.tutar || 0), 0), cols: [{ h: "Tarih", v: r => dt(r.tarih) }, { h: "Müşteri", v: r => r.musteri || "—" }, { h: "Açıklama", v: r => r.aciklama || "—" }, { h: "Tutar", v: r => D.money(r.tutar) }] }) },
     "/gelir-kira": { title: "Ev Kira Geliri", render: crud({ coll: "gelirler", title: "Ev Kira Geliri", icon: "🏠", addLabel: "Kira Geliri Ekle", totalLabel: "Toplam", defaults: { tur: "evKira" }, filter: g => g.tur === "evKira", fields: gelirFields, total: r => r.reduce((a, x) => a + (x.tutar || 0), 0), cols: [{ h: "Tarih", v: r => dt(r.tarih) }, { h: "Açıklama", v: r => r.aciklama || "—" }, { h: "Tutar", v: r => D.money(r.tutar) }] }) },
 
     "/gider-genel": { title: "Genel Giderler", render: giderRoute("genel", "📋") },
@@ -114,7 +114,7 @@
 
     "/hasat": { title: "Hasat Takip", render: crud({ coll: "hasatlar", title: "Hasat Takip", icon: "🌰", addLabel: "Hasat Kaydı Ekle", lead: "Tarla bazlı yaş/kuru ürün, randıman, nem", fields: hasatFields, compute: d => { const r = (d.yasUrun && d.kuruUrun) ? Math.round(d.kuruUrun / d.yasUrun * 100) : ""; return { randiman: r ? "Randıman: %" + r : "" }; }, computeSave: d => ({ randiman: (d.yasUrun && d.kuruUrun) ? Math.round(d.kuruUrun / d.yasUrun * 100) : d.randiman }), cols: [{ h: "Tarla", v: r => (D.coll("tarlalar").find(t => t.id === r.tarlaId) || {}).ad || "—" }, { h: "Tarih", v: r => dt(r.tarih) }, { h: "Yaş (kg)", v: r => D.num(r.yasUrun) }, { h: "Kuru (kg)", v: r => D.num(r.kuruUrun) }, { h: "Randıman", v: r => "%" + (r.randiman || 0) }, { h: "Nem", v: r => "%" + (r.nem || 0) }] }) },
 
-    "/isci-kiralama": { title: "İşçi Kiralama", render: crud({ coll: "isciKiralamalar", title: "İşçi Kiralama", icon: "🧾", addLabel: "Kiralama Ekle", lead: "Müşteri bazlı kişi sayısı ve hakediş", totalLabel: "Toplam Hakediş", total: r => r.reduce((a, x) => a + (x.tutar || 0), 0), fields: () => [{ key: "tarih", label: "Tarih", type: "date", required: true }, { key: "musteri", label: "Müşteri", type: "text" }, { key: "kisi", label: "İşçi Sayısı", type: "number", required: true }, { key: "tutar", label: "Toplam Tutar (₺)", type: "money", required: true }], cols: [{ h: "Tarih", v: r => dt(r.tarih) }, { h: "Müşteri", v: r => r.musteri || "—" }, { h: "İşçi", v: r => (r.kisi || 0) + " kişi" }, { h: "Tutar", v: r => D.money(r.tutar) }] }) },
+    "/isci-kiralama": { title: "İşçi Kiralama", render: v => Isci.render(v) },
 
     "/is-takibi": { title: "İş Takibi", render: crud({ coll: "isTakip", title: "İş Takibi", icon: "⏱️", addLabel: "İş Ekle", lead: "Başlangıç/bitiş (gg/aa/yyyy & 00.00) ve ödeme", sort: (a, b) => new Date(b.baslangic) - new Date(a.baslangic), fields: () => [{ key: "baslik", label: "İş Adı", type: "text", required: true, full: true }, { key: "baslangic", label: "Başlangıç", type: "datetime", required: true }, { key: "bitis", label: "Bitiş", type: "datetime" }, { key: "odeme", label: "Toplam Ödeme (₺)", type: "money" }, { key: "aciklama", label: "Açıklama", type: "textarea", full: true }], total: r => r.reduce((a, x) => a + (x.odeme || 0), 0), totalLabel: "Toplam Ödeme", cols: [{ h: "İş", v: r => r.baslik }, { h: "Başlangıç", v: r => dtt(r.baslangic) }, { h: "Bitiş", v: r => dtt(r.bitis) }, { h: "Ödeme", v: r => D.money(r.odeme) }] }) },
 
@@ -181,6 +181,7 @@
           <p class="lead" style="margin-top:14px">🔒 Tüm veri yalnızca bu cihazda saklanır.</p>
         </div>
       </div>
+      <div class="panel" id="cloudPanel" style="margin-top:14px;max-width:540px"></div>
       <div class="panel" style="margin-top:14px;max-width:540px"><h3>ℹ️ Hakkında</h3>
         <div class="about-row"><b>Uygulama</b><span>TİYS — Tarım İşletme Yönetim Sistemi</span></div>
         <div class="about-row"><b>Sürüm</b><span>1.0.0</span></div>
@@ -211,6 +212,37 @@
       rdr.readAsText(file);
     };
     view.querySelector("#b_reset").onclick = () => { if (confirm("Tüm veriler silinip demo verilere dönülecek. Emin misin?")) { D.reset(); Forms.toast("Sıfırlandı"); FIYS.route(); } };
+
+    function renderCloud() {
+      const p = view.querySelector("#cloudPanel"); if (!p || typeof Cloud === "undefined") return;
+      const s = Cloud.status();
+      if (!s.configured) {
+        p.innerHTML = `<h3>☁️ Bulut Senkron</h3><p class="lead" style="margin-top:0">Henüz kurulmadı. Kurulduğunda telefon · bilgisayar · web otomatik eşitlenir, USB ile taşımaya gerek kalmaz.</p>`;
+        return;
+      }
+      if (!s.loggedIn) {
+        p.innerHTML = `<h3>☁️ Bulut Senkron</h3>
+          <p class="lead" style="margin-top:0">Giriş yap; verilerin tüm cihazlarında otomatik eşitlensin.</p>
+          <div class="form-grid"><div class="field"><label>E-posta</label><input id="cl_mail" type="email" placeholder="ornek@mail.com"></div>
+          <div class="field"><label>Şifre</label><input id="cl_pass" type="password" placeholder="en az 6 karakter"></div></div>
+          <div style="display:flex;gap:10px;margin-top:12px"><button class="btn primary" id="cl_in">Giriş Yap</button><button class="btn ghost" id="cl_up">Kayıt Ol</button></div>
+          <div class="lead" id="cl_msg" style="margin-top:10px"></div>`;
+        const mail = () => p.querySelector("#cl_mail").value.trim(), pass = () => p.querySelector("#cl_pass").value, msg = t => p.querySelector("#cl_msg").textContent = t;
+        p.querySelector("#cl_in").onclick = async () => { msg("Giriş yapılıyor…"); const r = await Cloud.signIn(mail(), pass()); if (r.error) msg("⚠️ " + r.error); else { Forms.toast("Giriş yapıldı ✓"); renderCloud(); } };
+        p.querySelector("#cl_up").onclick = async () => { msg("Kayıt olunuyor…"); const r = await Cloud.signUp(mail(), pass()); if (r.error) msg("⚠️ " + r.error); else { msg("✓ " + (r.mesaj || "Kayıt oldu")); renderCloud(); } };
+      } else {
+        p.innerHTML = `<h3>☁️ Bulut Senkron</h3>
+          <div class="about-row"><b>Hesap</b><span>${s.email} ✓</span></div>
+          <div class="about-row"><b>Son eşitleme</b><span>${s.lastSync ? D.dateTimeTR(s.lastSync) : "—"}</span></div>
+          <p class="lead">Veriler değiştikçe otomatik buluta yüklenir; yeni cihazda giriş yapınca otomatik iner.</p>
+          <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn ghost" id="cl_push">⬆️ Şimdi Yükle</button><button class="btn ghost" id="cl_pull">⬇️ Buluttan Çek</button><button class="btn danger" id="cl_out">Çıkış</button></div>`;
+        p.querySelector("#cl_push").onclick = async () => { const r = await Cloud.push(); Forms.toast(r.error ? "⚠️ " + r.error : "Buluta yüklendi ✓"); renderCloud(); };
+        p.querySelector("#cl_pull").onclick = async () => { if (!confirm("Buluttaki veri bu cihazdakini değiştirecek. Devam?")) return; const r = await Cloud.pull(); Forms.toast(r.error ? "⚠️ " + r.error : (r.vardi ? "Buluttan çekildi ✓" : "Bulutta kayıt yok")); };
+        p.querySelector("#cl_out").onclick = async () => { await Cloud.signOut(); Forms.toast("Çıkış yapıldı"); renderCloud(); };
+      }
+    }
+    renderCloud();
+
     function val(s) { return view.querySelector(s).value; }
   }
 
