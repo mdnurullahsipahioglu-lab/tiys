@@ -19,6 +19,11 @@
     ).join("");
   }
   function colorFor(k) { return PALETTE.gider[k] || PALETTE.gelir[k] || "#94a3b8"; }
+  function urunOzet() {
+    const map = {};
+    DB.coll("tarlalar").forEach(x => { const u = x.urun || "findik"; (map[u] = map[u] || { urun: u, adet: 0, dekar: 0 }); map[u].adet++; map[u].dekar += (Number(x.alanDekar) || 0); });
+    return Object.values(map).sort((a, b) => b.dekar - a.dekar);
+  }
 
   function render(view) {
     destroy();
@@ -29,6 +34,10 @@
     const sira = DB.tarlaVerimSirasi();
     const isler = DB.coll("isler").slice().sort((a, b) => new Date(a.tarih) - new Date(b.tarih)).slice(0, 5);
     const kiralar = DB.coll("isciKiralamalar").slice().sort((a, b) => new Date(b.tarih) - new Date(a.tarih)).slice(0, 5);
+    const borcOzet = DB.musteriOzet();
+    const borclu = borcOzet.filter(o => o.kalan > 0.5);
+    const toplamAlacak = borcOzet.reduce((a, x) => a + x.kalan, 0);
+    const urunler = urunOzet();
 
     // hasat geri sayımı
     const hasatT = new Date(DB.load().ayarlar.hasatTarihi);
@@ -107,6 +116,15 @@
         </div>
       </div>
 
+      <!-- Ürün dağılımı (çoklu ürün) -->
+      <div class="panel">
+        <div class="h-row"><h3>🌱 Ürün Dağılımı</h3><span class="lead" style="font-size:12px">${urunler.length} ürün · ${tarlalar.length} tarla</span></div>
+        <div class="urun-strip">
+          ${urunler.map(u => `<div class="urun-item"><div class="ue">${DB.urun(u.urun).emoji}</div>
+            <div><b>${DB.urun(u.urun).ad}</b><div class="lead" style="font-size:11.5px">${u.adet} tarla · ${DB.num(u.dekar)} dekar</div></div></div>`).join("")}
+        </div>
+      </div>
+
       <!-- Alt: 3'lü -->
       <div class="grid cols-trio">
         <div class="panel">
@@ -122,11 +140,14 @@
           ${Object.keys(giderD).filter(k => giderD[k] > 0).sort((a, b) => giderD[b] - giderD[a]).slice(0, 6).map(k =>
             `<div class="hbar-row"><span class="lbl">${k}</span><div class="bar"><span style="width:${pct(giderD[k], gider)}%;background:${colorFor(k)}"></span></div><span class="pct">%${pct(giderD[k], gider)}</span></div>`).join("")}
         </div>
-        <div class="panel">
-          <h3>🧾 Son İşçi Kiralamalar</h3>
-          <table class="t"><thead><tr><th>Tarih</th><th>İşçi</th><th>Tutar</th></tr></thead><tbody>
-          ${kiralar.map(k => `<tr><td>${DB.dateTR(k.tarih)}</td><td>${k.kisi} kişi</td><td>${DB.money(k.tutar)}</td></tr>`).join("")}
+        <div class="panel" id="alacakPanel" style="cursor:pointer">
+          <div class="h-row"><h3>💵 Tahsil Edilecek Alacaklar</h3>${borclu.length ? `<span class="soon">${borclu.length} borçlu</span>` : ""}</div>
+          ${borclu.length ? `<div style="font-size:23px;font-weight:800;color:#f59e0b;margin:2px 0 10px">${DB.money(toplamAlacak)}</div>
+          <table class="t"><tbody>
+          ${borclu.slice(0, 5).map(o => `<tr><td>${o.musteri}</td><td style="text-align:right;font-weight:700;color:#f59e0b">${DB.money(o.kalan)}</td></tr>`).join("")}
           </tbody></table>
+          <div class="lead" style="margin-top:8px;font-size:11.5px">İşçi Kiralama sayfasına git →</div>`
+          : `<div class="empty"><div class="e-ico">🟢</div>Tüm müşteri hesapları kapalı.<br>Bekleyen alacağın yok.</div>`}
         </div>
       </div>
     </div>`;
@@ -134,6 +155,7 @@
     initCharts(giderD, gider, gelirD, gelir);
     initMap(tarlalar);
     bindAI();
+    const ap = view.querySelector("#alacakPanel"); if (ap) ap.onclick = () => { location.hash = "#/isci-kiralama"; };
   }
 
   function kpi(cls, ico, label, val, foot, trend) {

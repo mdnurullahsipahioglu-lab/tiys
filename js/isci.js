@@ -159,17 +159,80 @@
           : `<tr><td>${dt(h.tarih)}</td><td>💰 Tahsilat</td><td>${esc(h.not || h.aciklama || "—")}</td><td style="color:var(--teal);font-weight:600">−${money(h.tutar)}</td><td><button class="icon-act" data-et="${h.id}">✏️</button></td></tr>`
         ).join("") : `<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:18px">Kayıt yok</td></tr>`}</tbody></table>
       </div>
-      <div class="modal-foot"><span></span><div class="right"><button class="btn ghost" data-cancel>Kapat</button></div></div>
+      <div class="modal-foot"><button class="btn ghost" data-ekstre>📄 Ekstre / Paylaş</button><div class="right"><button class="btn ghost" data-cancel>Kapat</button></div></div>
     </div>`;
     document.body.appendChild(ov);
     const close = () => ov.remove();
     ov.querySelector(".x").onclick = close;
     ov.querySelector("[data-cancel]").onclick = close;
     ov.onclick = e => { if (e.target === ov) close(); };
+    ov.querySelector("[data-ekstre]").onclick = () => { close(); musteriEkstre(m); };
     ov.querySelector("[data-add-kira]").onclick = () => { close(); kiralamaForm(null, m); };
     ov.querySelector("[data-add-tah]").onclick = () => { close(); tahsilatForm(null, m); };
     ov.querySelectorAll("[data-ek]").forEach(b => b.onclick = () => { close(); kiralamaForm(D.coll("isciKiralamalar").find(x => x.id === b.dataset.ek), m); });
     ov.querySelectorAll("[data-et]").forEach(b => b.onclick = () => { close(); tahsilatForm(D.tahsilatlar().find(x => x.id === b.dataset.et), m); });
+  }
+
+  // ---- Müşteri ekstresi (yazdır / WhatsApp / kopyala) ----
+  function bugunTR() { try { return D.dateTR(new Date().toISOString()); } catch (e) { return ""; } }
+  function musteriEkstre(musteri) {
+    const m = String(musteri).trim(), a = D.load().ayarlar;
+    const kira = D.coll("isciKiralamalar").filter(k => String(k.musteri || "").trim() === m).sort((x, y) => new Date(x.tarih) - new Date(y.tarih));
+    const tah = D.tahsilatlar().filter(t => String(t.musteri || "").trim() === m).sort((x, y) => new Date(x.tarih) - new Date(y.tarih));
+    const hakedis = kira.reduce((s, x) => s + (x.tutar || 0), 0);
+    const tahsil = tah.reduce((s, x) => s + (x.tutar || 0), 0);
+    const kalan = hakedis - tahsil, bugun = bugunTR();
+
+    // düz metin (WhatsApp / kopyala)
+    const L = [];
+    L.push((a.isletmeAdi || "Tarım İşletmesi").toLocaleUpperCase("tr"));
+    L.push("Müşteri Hesap Ekstresi — " + bugun);
+    L.push("Müşteri: " + m);
+    L.push("");
+    L.push("KİRALAMALAR (Hakediş)");
+    kira.forEach(k => L.push("• " + D.dateTR(k.tarih) + "  " + num(k.kisi) + " işçi x " + num(k.gun) + " gün x " + money(k.yevmiye) + " = " + money(k.tutar)));
+    L.push("Toplam Hakediş: " + money(hakedis));
+    L.push("");
+    L.push("TAHSİLATLAR (Ödeme)");
+    if (tah.length) tah.forEach(t => L.push("• " + D.dateTR(t.tarih) + "  " + money(t.tutar) + (t.not ? " (" + t.not + ")" : "")));
+    else L.push("• (ödeme yok)");
+    L.push("Toplam Tahsil: " + money(tahsil));
+    L.push("");
+    L.push(kalan > 0.5 ? ("KALAN BORÇ: " + money(kalan)) : "DURUM: Hesap kapandı ✓");
+    const metin = L.join("\n");
+
+    // yazdırma HTML
+    const satir = (sol, sag, kalin) => `<tr${kalin ? ' style="font-weight:700;border-top:1px solid #ddd"' : ""}><td style="padding:5px 8px">${sol}</td><td style="padding:5px 8px;text-align:right;white-space:nowrap">${sag}</td></tr>`;
+    const html = `<div id="ekstreYazdir" style="font-family:system-ui,Arial,sans-serif;color:#111">
+      <h2 style="margin:0 0 2px">${esc(a.isletmeAdi || "Tarım İşletmesi")}</h2>
+      <div style="color:#666;margin-bottom:12px">Müşteri Hesap Ekstresi · ${bugun}</div>
+      <div style="font-size:16px;font-weight:700;margin-bottom:10px">👤 ${esc(m)}</div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <tr style="background:#f3f4f6"><td colspan="2" style="text-align:left;padding:6px 8px;font-weight:700">Kiralamalar (Hakediş)</td></tr>
+        ${kira.map(k => satir(D.dateTR(k.tarih) + " · " + num(k.kisi) + " işçi × " + num(k.gun) + " gün × " + money(k.yevmiye), money(k.tutar))).join("")}
+        ${satir("Toplam Hakediş", money(hakedis), true)}
+        <tr style="background:#f3f4f6"><td colspan="2" style="text-align:left;padding:6px 8px;font-weight:700">Tahsilatlar (Ödeme)</td></tr>
+        ${tah.length ? tah.map(t => satir(D.dateTR(t.tarih) + (t.not ? " · " + esc(t.not) : ""), money(t.tutar))).join("") : `<tr><td colspan="2" style="padding:5px 8px;color:#888">Ödeme yok</td></tr>`}
+        ${satir("Toplam Tahsil", money(tahsil), true)}
+      </table>
+      <div style="margin-top:14px;padding:10px 12px;border-radius:10px;background:${kalan > 0.5 ? "#fff7ed" : "#ecfdf5"};font-size:16px;font-weight:800;color:${kalan > 0.5 ? "#b45309" : "#047857"}">
+        ${kalan > 0.5 ? "KALAN BORÇ: " + money(kalan) : "✓ Hesap kapandı"}</div></div>`;
+
+    const ov = document.createElement("div");
+    ov.className = "modal-overlay";
+    ov.innerHTML = `<div class="modal">
+      <div class="modal-head"><h3>📄 ${esc(m)} — Ekstre</h3><button class="x">✕</button></div>
+      <div class="modal-body">${html}</div>
+      <div class="modal-foot"><button class="btn ghost" data-print>🖨️ Yazdır</button>
+        <div class="right"><button class="btn ghost" data-wa>📱 WhatsApp</button><button class="btn primary" data-copy>📋 Kopyala</button></div></div>
+    </div>`;
+    document.body.appendChild(ov);
+    const close = () => ov.remove();
+    ov.querySelector(".x").onclick = close;
+    ov.onclick = e => { if (e.target === ov) close(); };
+    ov.querySelector("[data-print]").onclick = () => { document.body.classList.add("printing"); window.print(); setTimeout(() => document.body.classList.remove("printing"), 600); };
+    ov.querySelector("[data-wa]").onclick = () => { try { window.open("https://wa.me/?text=" + encodeURIComponent(metin), "_blank"); } catch (e) {} };
+    ov.querySelector("[data-copy]").onclick = () => { try { navigator.clipboard.writeText(metin); Forms.toast("Ekstre kopyalandı ✓"); } catch (e) { Forms.toast("Kopyalanamadı"); } };
   }
 
   global.Isci = { render };

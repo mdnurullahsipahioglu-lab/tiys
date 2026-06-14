@@ -153,6 +153,14 @@ table.t tr:last-child td{border-bottom:0}
 .ai-full .ai-chips{flex-direction:row;flex-wrap:wrap}
 .ai-full .ai-chip{flex:0 1 auto}
 .ai-full .ai-input button{font-size:16px}
+.urun-strip{display:flex;flex-wrap:wrap;gap:10px}
+.urun-item{display:flex;gap:10px;align-items:center;background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:9px 14px;min-width:148px}
+.urun-item .ue{font-size:26px;line-height:1}
+@media print{
+  body.printing *{visibility:hidden!important}
+  body.printing #ekstreYazdir,body.printing #ekstreYazdir *{visibility:visible!important}
+  body.printing #ekstreYazdir{position:absolute;left:0;top:0;width:100%;padding:20px}
+}
 
 /* Generic page (modüller) */
 .page-head{display:flex;align-items:center;justify-content:space-between;margin:8px 0 16px}
