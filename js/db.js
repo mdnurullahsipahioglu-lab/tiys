@@ -1,0 +1,207 @@
+/* TİYS — Tarım İşletme Yönetim Sistemi
+ * Veri katmanı: localStorage tabanlı, offline çalışır, JSON yedek al/yükle.
+ * Tüm modüller bu katman üzerinden okur/yazar.
+ */
+(function (global) {
+  "use strict";
+  const KEY = "fiys_db_v1";
+
+  // ---- Türkçe biçimlendiriciler -------------------------------------------
+  const TL = new Intl.NumberFormat("tr-TR", { style: "currency", currency: "TRY", maximumFractionDigits: 0 });
+  const NUM = new Intl.NumberFormat("tr-TR");
+  function money(n) { return TL.format(Number(n) || 0); }
+  function num(n) { return NUM.format(Number(n) || 0); }
+  // gg/aa/yyyy
+  function dateTR(d) {
+    const x = (d instanceof Date) ? d : new Date(d);
+    if (isNaN(x)) return "—";
+    const p = (v) => String(v).padStart(2, "0");
+    return `${p(x.getDate())}/${p(x.getMonth() + 1)}/${x.getFullYear()}`;
+  }
+  // gg/aa/yyyy & 00.00  (saat ayıracı NOKTA — spec gereği)
+  function dateTimeTR(d) {
+    const x = (d instanceof Date) ? d : new Date(d);
+    if (isNaN(x)) return "—";
+    const p = (v) => String(v).padStart(2, "0");
+    return `${dateTR(x)} ${p(x.getHours())}.${p(x.getMinutes())}`;
+  }
+  function uid() { return "id" + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36); }
+
+  // ---- ÜRÜN KAYIT DEFTERİ (çoklu ürün desteği) ----------------------------
+  const URUNLER = {
+    findik:    { ad: "Fındık", emoji: "🌰", cesitler: ["Tombul", "Palaz", "Çakıldak", "Foşa", "Mincane", "Sivri", "Diğer"], birim: "kg", defaultFiyat: 250, hasatAy: 8 },
+    zeytin:    { ad: "Zeytin", emoji: "🫒", cesitler: ["Gemlik", "Ayvalık", "Memecik", "Domat", "Çelebi", "Diğer"], birim: "kg", defaultFiyat: 40, hasatAy: 11 },
+    ceviz:     { ad: "Ceviz", emoji: "🥥", cesitler: ["Chandler", "Fernor", "Franquette", "Şebin", "Bilecik", "Diğer"], birim: "kg", defaultFiyat: 130, hasatAy: 9 },
+    narenciye: { ad: "Narenciye", emoji: "🍊", cesitler: ["Portakal", "Mandalina", "Limon", "Greyfurt", "Diğer"], birim: "kg", defaultFiyat: 18, hasatAy: 12 },
+    uzum:      { ad: "Üzüm", emoji: "🍇", cesitler: ["Sultani", "Razakı", "Öküzgözü", "Boğazkere", "Kalecik", "Diğer"], birim: "kg", defaultFiyat: 30, hasatAy: 9 },
+    tibbi:     { ad: "Tıbbi-Aromatik", emoji: "🌿", cesitler: ["Lavanta", "Kekik", "Adaçayı", "Nane", "Rezene", "Diğer"], birim: "kg", defaultFiyat: 90, hasatAy: 7 },
+    diger:     { ad: "Diğer", emoji: "🌱", cesitler: ["Diğer"], birim: "kg", defaultFiyat: 0, hasatAy: 9 }
+  };
+  function urun(key) { return URUNLER[key] || URUNLER.findik; }
+  function urunFiyat(key) { const a = (_data && _data.ayarlar) || {}; return (a.urunFiyat && a.urunFiyat[key] != null) ? a.urunFiyat[key] : urun(key).defaultFiyat; }
+  function aktifUrunler() { const s = new Set(coll("tarlalar").map(t => t.urun || "findik")); return [...s]; }
+  function urunOptions() { return Object.keys(URUNLER).map(k => ({ v: k, l: URUNLER[k].emoji + " " + URUNLER[k].ad })); }
+
+  // ---- Depolama ------------------------------------------------------------
+  let _data = null;
+  function load() {
+    if (_data) return _data;
+    try {
+      const raw = localStorage.getItem(KEY);
+      _data = raw ? JSON.parse(raw) : seed();
+    } catch (e) { _data = seed(); }
+    if (!localStorage.getItem(KEY)) save();
+    return _data;
+  }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(_data)); } catch (e) {} }
+  function reset() { _data = seed(); save(); return _data; }
+
+  // ---- CRUD yardımcıları ---------------------------------------------------
+  function coll(name) { const d = load(); if (!d[name]) d[name] = []; return d[name]; }
+  function add(name, obj) { const c = coll(name); obj.id = obj.id || uid(); c.push(obj); save(); return obj; }
+  function update(name, id, patch) { const c = coll(name); const i = c.findIndex(x => x.id === id); if (i >= 0) { c[i] = Object.assign({}, c[i], patch); save(); return c[i]; } }
+  function remove(name, id) { const d = load(); d[name] = coll(name).filter(x => x.id !== id); save(); }
+
+  // ---- Hesaplamalar (dashboard + raporlar) --------------------------------
+  function sum(arr, f) { return arr.reduce((a, x) => a + (Number(f ? f(x) : x) || 0), 0); }
+  function yearOf(d) { return new Date(d).getFullYear(); }
+
+  function toplamGelir(yil) { return sum(coll("gelirler").filter(g => !yil || yearOf(g.tarih) === yil), g => g.tutar); }
+  function toplamGider(yil) { return sum(coll("giderler").filter(g => !yil || yearOf(g.tarih) === yil), g => g.tutar); }
+  function netKar(yil) { return toplamGelir(yil) - toplamGider(yil); }
+  function toplamDekar() { return sum(coll("tarlalar"), t => t.alanDekar); }
+
+  function giderDagilimi(yil) {
+    const g = coll("giderler").filter(x => !yil || yearOf(x.tarih) === yil);
+    const cats = { iscilik: "İşçilik", gubre: "Gübre", yakit: "Yakıt", makine: "Makine", ekipman: "Ekipman", diger: "Diğer" };
+    const out = {};
+    Object.keys(cats).forEach(k => out[cats[k]] = 0);
+    g.forEach(x => { const lbl = cats[x.altKategori] || cats[x.kategori] || "Diğer"; out[lbl] = (out[lbl] || 0) + (Number(x.tutar) || 0); });
+    return out;
+  }
+  function gelirDagilimi(yil) {
+    const g = coll("gelirler").filter(x => !yil || yearOf(x.tarih) === yil);
+    const lbl = { hasat: "Hasat Geliri", isciKiralama: "İşçi Kiralama", evKira: "Ev Kira" };
+    const out = { "Hasat Geliri": 0, "İşçi Kiralama": 0, "Ev Kira": 0 };
+    g.forEach(x => { out[lbl[x.tur] || "Hasat Geliri"] += (Number(x.tutar) || 0); });
+    return out;
+  }
+  // Aylık gelir/gider (trend grafiği)
+  function aylikTrend(yil) {
+    const ay = Array.from({ length: 12 }, () => ({ gelir: 0, gider: 0 }));
+    coll("gelirler").forEach(g => { const d = new Date(g.tarih); if (yearOf(d) === yil) ay[d.getMonth()].gelir += Number(g.tutar) || 0; });
+    coll("giderler").forEach(g => { const d = new Date(g.tarih); if (yearOf(d) === yil) ay[d.getMonth()].gider += Number(g.tutar) || 0; });
+    return ay;
+  }
+  function tarlaVerimSirasi() {
+    return coll("tarlalar").slice().map(t => {
+      const h = coll("hasatlar").filter(x => x.tarlaId === t.id).sort((a, b) => new Date(b.tarih) - new Date(a.tarih))[0];
+      const kgDekar = h && t.alanDekar ? Math.round(h.kuruUrun / t.alanDekar) : (t.sonVerimKgDekar || 0);
+      return { ad: t.ad, kgDekar, puan: t.verimPuani || 0 };
+    }).sort((a, b) => b.puan - a.puan);
+  }
+
+  // ---- Yedek ---------------------------------------------------------------
+  function exportJSON() { return JSON.stringify(load(), null, 2); }
+  function importJSON(str) { try { _data = JSON.parse(str); save(); return true; } catch (e) { return false; } }
+
+  // ---- Tohum (mockup'a uygun demo veri) -----------------------------------
+  function seed() {
+    const Y = 2026;
+    const tarlaTanim = [
+      { ad: "Köprübaşı 1", koy: "Merkez", adaParsel: "112/4", alanDekar: 11, dikimYili: 2008, cesit: "Tombul", rakim: 320, egim: "Orta", lat: 40.985, lng: 36.742, verimPuani: 92, sonVerimKgDekar: 265 },
+      { ad: "Merkez 2", koy: "Merkez", adaParsel: "118/2", alanDekar: 10, dikimYili: 2010, cesit: "Tombul", rakim: 305, egim: "Az", lat: 40.982, lng: 36.738, verimPuani: 88, sonVerimKgDekar: 240 },
+      { ad: "Yukarı Tarla", koy: "Yeşilköy", adaParsel: "204/1", alanDekar: 9, dikimYili: 2006, cesit: "Çakıldak", rakim: 410, egim: "Dik", lat: 40.991, lng: 36.751, verimPuani: 81, sonVerimKgDekar: 215 },
+      { ad: "Çeşme Yanı", koy: "Yeşilköy", adaParsel: "207/3", alanDekar: 6, dikimYili: 2012, cesit: "Tombul", rakim: 395, egim: "Orta", lat: 40.989, lng: 36.747, verimPuani: 77, sonVerimKgDekar: 195 },
+      { ad: "Aşağı Tarla", koy: "Merkez", adaParsel: "121/7", alanDekar: 8.5, dikimYili: 2005, cesit: "Palaz", rakim: 290, egim: "Az", lat: 40.978, lng: 36.733, verimPuani: 68, sonVerimKgDekar: 165 },
+      { ad: "Yeşme Tarla", koy: "Yeşilköy", adaParsel: "210/2", alanDekar: 7, dikimYili: 2009, cesit: "Tombul", rakim: 400, egim: "Orta", lat: 40.994, lng: 36.744, verimPuani: 81, sonVerimKgDekar: 210 },
+      { ad: "Dere Kenarı", koy: "Merkez", adaParsel: "130/5", alanDekar: 6.5, dikimYili: 2011, cesit: "Çakıldak", rakim: 280, egim: "Az", lat: 40.975, lng: 36.729, verimPuani: 74, sonVerimKgDekar: 190 },
+      { ad: "Tepe Üstü", koy: "Karaköy", adaParsel: "301/1", alanDekar: 5.5, dikimYili: 2007, cesit: "Palaz", rakim: 460, egim: "Dik", lat: 41.001, lng: 36.760, verimPuani: 70, sonVerimKgDekar: 175 },
+      { ad: "Bağ Yolu", koy: "Karaköy", adaParsel: "305/4", alanDekar: 6, dikimYili: 2013, cesit: "Tombul", rakim: 450, egim: "Orta", lat: 41.004, lng: 36.756, verimPuani: 79, sonVerimKgDekar: 205 },
+      { ad: "Kavak Altı", koy: "Merkez", adaParsel: "140/2", alanDekar: 5, dikimYili: 2014, cesit: "Tombul", rakim: 300, egim: "Az", lat: 40.972, lng: 36.736, verimPuani: 76, sonVerimKgDekar: 198 },
+      { ad: "Söğütlük", koy: "Yeşilköy", adaParsel: "215/6", alanDekar: 5.5, dikimYili: 2010, cesit: "Çakıldak", rakim: 390, egim: "Orta", lat: 40.996, lng: 36.749, verimPuani: 72, sonVerimKgDekar: 185 },
+      { ad: "Harman Yeri", koy: "Karaköy", adaParsel: "310/3", alanDekar: 5, dikimYili: 2008, cesit: "Palaz", rakim: 440, egim: "Dik", lat: 41.007, lng: 36.762, verimPuani: 66, sonVerimKgDekar: 160 }
+    ];
+    const tarlalar = tarlaTanim.map(t => Object.assign({ id: uid(), urun: "findik" }, t));
+    // Çoklu ürün demo — birkaç tarlayı farklı ürüne çevir
+    [["Aşağı Tarla", "zeytin", "Gemlik"], ["Tepe Üstü", "zeytin", "Ayvalık"], ["Bağ Yolu", "ceviz", "Chandler"], ["Söğütlük", "ceviz", "Fernor"]]
+      .forEach(([ad, u, c]) => { const t = tarlalar.find(x => x.ad === ad); if (t) { t.urun = u; t.cesit = c; } });
+
+    // Gelirler — toplam ~1.250.000 (Hasat %85, İşçi Kiralama %10, Ev Kira %5)
+    const gelirler = [];
+    let g = (tur, tarih, tutar, aciklama, tarlaId) => gelirler.push({ id: uid(), tur, tarih, tutar, aciklama, tarlaId });
+    // Hasat gelirleri — hasat sonrası Eylül-Aralık'a yayılmış satışlar ~1.062.600
+    [["2026-09-05", 175000, "Köprübaşı 1 hasat satışı"], ["2026-09-22", 150000, "Merkez 2 hasat satışı"],
+     ["2026-10-08", 140000, "Yukarı Tarla + Çeşme Yanı satışı"], ["2026-10-24", 120000, "Yeşme Tarla satışı"],
+     ["2026-11-10", 110000, "Aşağı Tarla satışı"], ["2026-11-26", 100000, "Dere Kenarı + Tepe Üstü satışı"],
+     ["2026-12-12", 95000, "Bağ Yolu + Kavak Altı satışı"], ["2026-12-24", 172600, "Söğütlük + Harman Yeri + kalan satış"]
+    ].forEach(r => g("hasat", r[0], r[1], r[2]));
+    // İşçi kiralama geliri ~125.000
+    [["2026-06-12", 60000, "İşçi ekibi kiralama"], ["2026-07-10", 65000, "Tırpan ekibi kiralama"]].forEach(r => g("isciKiralama", r[0], r[1], r[2]));
+    // Ev kira ~62.500
+    for (let m = 0; m < 12; m++) g("evKira", `2026-${String(m + 1).padStart(2, "0")}-05`, 5200, "Aylık ev kirası");
+
+    // Giderler — toplam ~720.000 (İşçilik %45, Gübre %20, Yakıt %12, Makine %8, Ekipman %7, Diğer %8)
+    const giderler = [];
+    let gi = (kategori, altKategori, tur, tarih, tutar, aciklama) => giderler.push({ id: uid(), kategori, altKategori, tur, tarih, tutar, aciklama });
+    gi("genel", "iscilik", "Fındık çipil temizlik işçilik", "2026-03-12", 95000, "");
+    gi("genel", "iscilik", "Kalın dal budama", "2026-02-20", 48000, "");
+    gi("genel", "iscilik", "İlk tırpan işçilik", "2026-05-15", 52000, "");
+    gi("genel", "iscilik", "Hasat işçilik", "2026-08-15", 78000, "");
+    gi("genel", "iscilik", "Çapalama", "2026-04-22", 35000, "");
+    gi("genel", "iscilik", "Patoz işçilik", "2026-09-02", 16000, "");
+    gi("genel", "gubre", "Gübre bedeli", "2026-03-25", 88000, "");
+    gi("genel", "gubre", "Gübre işçilik bedeli", "2026-03-26", 56000, "");
+    gi("yakit", "yakit", "Tırpan yakıt", "2026-05-18", 42000, "Benzin");
+    gi("yakit", "yakit", "Traktör motorin", "2026-06-01", 34000, "Motorin");
+    gi("yakit", "yakit", "Yağ", "2026-06-01", 10000, "");
+    gi("makine", "makine", "Motor tamir + misina", "2026-05-30", 28000, "");
+    gi("makine", "makine", "Patoz bakım", "2026-08-20", 18000, "");
+    gi("makine", "makine", "Traktör bakım", "2026-04-10", 12000, "");
+    gi("ekipman", "ekipman", "Misina + zincir", "2026-05-10", 14000, "");
+    gi("ekipman", "ekipman", "Koruyucu ekipman + el aletleri", "2026-05-11", 36000, "");
+    gi("genel", "diger", "İlaçlama bedeli", "2026-06-25", 31000, "");
+    gi("genel", "diger", "Yemek bedeli", "2026-08-15", 27000, "");
+
+    // Yaklaşan işler (takvim)
+    const isler = [
+      { id: uid(), baslik: "Gübreleme", tarih: "2026-06-20T08:00", durum: "planli" },
+      { id: uid(), baslik: "İlaçlama", tarih: "2026-06-25T07:30", durum: "planli" },
+      { id: uid(), baslik: "Tırpan İşçiliği", tarih: "2026-07-10T08:00", durum: "planli" },
+      { id: uid(), baslik: "Hasat Hazırlığı", tarih: "2026-08-05T09:00", durum: "planli" },
+      { id: uid(), baslik: "Hasat Başlangıcı", tarih: "2026-08-10T07:00", durum: "planli" }
+    ];
+
+    // Son işçi kiralamalar
+    const isciKiralamalar = [
+      { id: uid(), tarih: "2026-06-12", kisi: 15, tutar: 4000, musteri: "Ahmet A." },
+      { id: uid(), tarih: "2026-06-10", kisi: 10, tutar: 4000, musteri: "Mehmet B." },
+      { id: uid(), tarih: "2026-06-08", kisi: 12, tutar: 5000, musteri: "Hasan C." },
+      { id: uid(), tarih: "2026-06-05", kisi: 18, tutar: 7200, musteri: "Ali D." },
+      { id: uid(), tarih: "2026-06-01", kisi: 20, tutar: 8000, musteri: "Veli E." }
+    ];
+
+    return {
+      meta: { version: 1, urun: "Fındık", olusturma: "2026-06-13" },
+      ayarlar: {
+        isletmeAdi: "Sipahioğlu Tarım İşletmesi", yonetici: "Rıfat Sipahioğlu",
+        gelistirici: "Rıfat Sipahioğlu", iletisim: "rsipahi@gmail.com",
+        gubreFiyat: 450, iscilikFiyat: 900, mazotFiyat: 42,
+        urunFiyat: { findik: 250, zeytin: 40, ceviz: 130, narenciye: 18, uzum: 30, tibbi: 90 },
+        hasatTarihi: "2026-08-10", konum: { lat: 40.985, lng: 36.742, ad: "Merkez" }
+      },
+      tarlalar, gelirler, giderler, isler, isciKiralamalar,
+      isTakip: [], puantaj: [], hasatlar: [], aktifIsci: 34
+    };
+  }
+
+  // ---- Dışa aç -------------------------------------------------------------
+  global.DB = {
+    load, save, reset, coll, add, update, remove,
+    money, num, dateTR, dateTimeTR, uid,
+    toplamGelir, toplamGider, netKar, toplamDekar,
+    giderDagilimi, gelirDagilimi, aylikTrend, tarlaVerimSirasi,
+    exportJSON, importJSON,
+    URUNLER, urun, urunFiyat, aktifUrunler, urunOptions
+  };
+})(window);

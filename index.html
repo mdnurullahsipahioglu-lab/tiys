@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>TİYS — Tarım İşletme Yönetim Sistemi</title>
+<link rel="stylesheet" href="css/styles.css">
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+</head>
+<body>
+<div class="app">
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="logo">🌰</div>
+      <div><h1>TİYS</h1><small>Tarım İşletme<br>Yönetim Sistemi</small></div>
+    </div>
+    <nav class="nav" id="nav">
+      <a class="item" href="#/dashboard"><span class="ico">📊</span> Dashboard</a>
+
+      <div class="group" data-group>
+        <button class="item" data-toggle><span class="ico">👥</span> İş ve İşçi Takip <span class="caret">▶</span></button>
+        <div class="sub">
+          <a class="item" href="#/isci-kiralama"><span class="ico">🧾</span> İşçi Kiralama</a>
+          <a class="item" href="#/is-takibi"><span class="ico">⏱️</span> İş Takibi</a>
+          <a class="item" href="#/puantaj"><span class="ico">🕘</span> Puantaj</a>
+        </div>
+      </div>
+
+      <div class="group" data-group>
+        <button class="item" data-toggle><span class="ico">💰</span> Gelirler <span class="caret">▶</span></button>
+        <div class="sub">
+          <a class="item" href="#/gelir-hasat"><span class="ico">🌾</span> Hasat Geliri</a>
+          <a class="item" href="#/gelir-kiralama"><span class="ico">👷</span> İşçi Kiralama Geliri</a>
+          <a class="item" href="#/gelir-kira"><span class="ico">🏠</span> Ev Kira Geliri</a>
+        </div>
+      </div>
+
+      <div class="group" data-group>
+        <button class="item" data-toggle><span class="ico">🧮</span> Giderler <span class="caret">▶</span></button>
+        <div class="sub">
+          <a class="item" href="#/gider-genel"><span class="ico">📋</span> Genel Giderler</a>
+          <a class="item" href="#/gider-makine"><span class="ico">⚙️</span> Makine Giderleri</a>
+          <a class="item" href="#/gider-yakit"><span class="ico">⛽</span> Yakıt Giderleri</a>
+          <a class="item" href="#/gider-ekipman"><span class="ico">🛠️</span> Ekipman Giderleri</a>
+        </div>
+      </div>
+
+      <a class="item" href="#/tarlalar"><span class="ico">🗺️</span> Tarla Yönetimi</a>
+      <a class="item" href="#/hasat"><span class="ico">🌰</span> Hasat Takip</a>
+      <a class="item" href="#/raporlar"><span class="ico">📈</span> Raporlar</a>
+      <a class="item" href="#/hava"><span class="ico">🌦️</span> Hava ve Karar Destek</a>
+      <a class="item" href="#/analiz"><span class="ico">🔬</span> Analiz Merkezi</a>
+      <a class="item" href="#/ai"><span class="ico">🤖</span> Yapay Zeka Asistanı</a>
+      <a class="item" href="#/ayarlar"><span class="ico">⚙️</span> Ayarlar</a>
+      <div class="logout"><a class="item" href="#/dashboard"><span class="ico">🚪</span> Çıkış Yap</a></div>
+      <div class="credit">© 2026 Rıfat Sipahioğlu<br><span>Tüm hakları saklıdır</span></div>
+    </nav>
+  </aside>
+  <div class="backdrop" id="backdrop" onclick="FIYS.closeSidebar()"></div>
+
+  <!-- MAIN -->
+  <main class="main">
+    <header class="topbar">
+      <button class="menu-btn" onclick="FIYS.toggleSidebar()">☰</button>
+      <h2 id="pageTitle">Dashboard</h2>
+      <div class="spacer"></div>
+      <div class="chip" id="wxChip"><span class="big">🌤️ 24°C</span> <span>Az Bulutlu</span></div>
+      <div class="chip" id="dateChip">📅 —</div>
+      <button class="icon-btn">🔔<span class="badge">5</span></button>
+      <button class="icon-btn">✉️</button>
+      <div class="avatar"><span class="ph">Y</span><span id="userName">Yönetici</span></div>
+    </header>
+    <section class="content" id="view"><!-- router buraya basar --></section>
+  </main>
+</div>
+
+<script src="vendor/chart.umd.min.js"></script>
+<script src="vendor/leaflet/leaflet.js"></script>
+<script src="js/db.js"></script>
+<script src="js/forms.js"></script>
+<script src="js/dashboard.js"></script>
+<script src="js/reports.js"></script>
+<script src="js/weather.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
