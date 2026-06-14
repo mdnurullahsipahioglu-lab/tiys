@@ -146,7 +146,13 @@ table.t tr:last-child td{border-bottom:0}
 .ai-msgs{display:flex;flex-direction:column;gap:8px;margin-bottom:10px;max-height:220px;overflow:auto}
 .ai-msg{padding:9px 12px;border-radius:12px;font-size:12.5px;max-width:90%}
 .ai-msg.u{background:var(--purple);color:#fff;align-self:flex-end;border-bottom-right-radius:3px}
-.ai-msg.a{background:#f3f4f6;align-self:flex-start;border-bottom-left-radius:3px;white-space:pre-wrap}
+.ai-msg.a{background:#f3f4f6;align-self:flex-start;border-bottom-left-radius:3px;line-height:1.55}
+.ai-msg .muted{color:var(--muted);font-size:11px}
+.ai-full{display:flex;flex-direction:column;min-height:calc(100vh - 230px)}
+.ai-full .ai-msgs{max-height:none;flex:1;min-height:280px;margin-bottom:14px}
+.ai-full .ai-chips{flex-direction:row;flex-wrap:wrap}
+.ai-full .ai-chip{flex:0 1 auto}
+.ai-full .ai-input button{font-size:16px}
 
 /* Generic page (modüller) */
 .page-head{display:flex;align-items:center;justify-content:space-between;margin:8px 0 16px}

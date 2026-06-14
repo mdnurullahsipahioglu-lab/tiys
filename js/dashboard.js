@@ -217,26 +217,11 @@
     box.scrollTop = box.scrollHeight;
   }
 
-  // Yerel cevap motoru — veriden hesaplar (LLM gerekmez)
+  // Yerel cevap motoru — tam asistan (js/ai.js) ile aynı motoru kullanır
   const AI = {
     answer(q) {
-      q = q.toLowerCase();
-      if (q.includes("kârlı") || q.includes("karlı") || q.includes("kar")) {
-        const s = DB.tarlaVerimSirasi()[0];
-        return `En verimli tarlan: ${s.ad} (verim puanı %${s.puan}, ${DB.num(s.kgDekar)} kg/dekar). Tarla bazlı kâr için Raporlar → Kârlılık Raporu'na bak.`;
-      }
-      if (q.includes("gider")) {
-        const d = DB.giderDagilimi(YIL); const top = Object.keys(d).sort((a, b) => d[b] - d[a])[0];
-        return `En yüksek gider kalemin: ${top} — ${DB.money(d[top])} (toplam giderin %${pct(d[top], DB.toplamGider(YIL))}'i).`;
-      }
-      if (q.includes("gübre") && q.includes("10")) {
-        const d = DB.giderDagilimi(YIL); const tasarruf = Math.round((d["Gübre"] || 0) * 0.10);
-        return `Gübre maliyetini %10 azaltırsan yıllık ~${DB.money(tasarruf)} tasarruf edersin. Net kârın ${DB.money(DB.netKar(YIL))} → ${DB.money(DB.netKar(YIL) + tasarruf)} olur.`;
-      }
-      if (q.includes("hasat") && q.includes("tarih")) {
-        return `Tahmini hasat tarihi: ${DB.dateTR(DB.load().ayarlar.hasatTarihi)}. Önümüzdeki 5 gün yağış beklendiği için ilaçlamayı hasat öncesine bırakma.`;
-      }
-      return "Bunu verilerinden hesaplayabilirim. Gelir, gider, tarla kârlılığı veya hasat tarihi hakkında sorabilirsin. (Gelişmiş sorular için ileride gerçek AI bağlanacak.)";
+      if (global.Asistan && Asistan.cevap) return Asistan.cevap(q);
+      return "Bunu verilerinden hesaplayabilirim. Gelir, gider, tarla kârlılığı veya hasat tarihi hakkında sorabilirsin.";
     }
   };
 

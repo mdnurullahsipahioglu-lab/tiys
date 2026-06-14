@@ -123,7 +123,7 @@
     "/raporlar": { title: "Raporlar", render: v => Reports.karRapor(v) },
     "/hava": { title: "Hava ve Karar Destek", render: v => Weather.render(v) },
     "/analiz": { title: "Analiz Merkezi", render: v => Reports.analizPage(v) },
-    "/ai": { title: "Yapay Zeka Asistanı", render: stub("Yapay Zeka Asistanı", "Verinden cevap veren asistan", "🤖", ["Dashboard'daki asistan çalışıyor — buraya tam sayfa sohbet gelecek", "Gelir/gider/kârlılık/hasat sorularını yerel hesaplar"]) },
+    "/ai": { title: "Yapay Zeka Asistanı", render: v => Asistan.render(v) },
 
     "/ayarlar": { title: "Ayarlar", render: ayarlarPage }
   };
