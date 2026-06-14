@@ -6,8 +6,8 @@
   "use strict";
 
   // ===================== KONFİG (Supabase projenden) =====================
-  const SUPABASE_URL = "";        // ör. https://abcd1234.supabase.co
-  const SUPABASE_ANON = "";       // anon public key (gizli değil, gömülebilir)
+  const SUPABASE_URL = "https://mpibjupaxkhmbrbmzmtk.supabase.co";
+  const SUPABASE_ANON = "sb_publishable_2TNH2DCr1l1Y6PqrNnZUXg_Mk6WhN8s"; // publishable (client-safe, gömülebilir)
   const TABLE = "tiys_kayit";     // veri tablosu
   // =======================================================================
 
@@ -33,7 +33,8 @@
     const c = getClient(); if (!c) return { error: "Bulut yapılandırılmadı" };
     const { data, error } = await c.auth.signUp({ email, password: pass });
     if (error) return { error: cevir(error.message) };
-    user = data.user; emit(); return { ok: true, mesaj: "Kayıt oldun. E-postanı doğrulaman gerekebilir." };
+    if (data && data.session) { user = data.user; emit(); await push(); return { ok: true, mesaj: "Kayıt olundu ✓" }; }
+    return { ok: true, mesaj: "Kayıt oldun! E-postana gelen doğrulama bağlantısına bir kez tıkla, sonra 'Giriş Yap' de." };
   }
   async function signIn(email, pass) {
     const c = getClient(); if (!c) return { error: "Bulut yapılandırılmadı" };
@@ -70,7 +71,10 @@
   function cevir(m) {
     m = (m || "").toLowerCase();
     if (m.includes("invalid login")) return "E-posta ya da şifre hatalı.";
-    if (m.includes("already registered")) return "Bu e-posta zaten kayıtlı.";
+    if (m.includes("already registered")) return "Bu e-posta zaten kayıtlı, giriş yap.";
+    if (m.includes("not confirmed")) return "E-posta doğrulanmamış.";
+    if (m.includes("disabled")) return "E-posta girişi kapalı (Supabase'den açılmalı).";
+    if (m.includes("invalid") && m.includes("email")) return "Geçersiz e-posta adresi.";
     if (m.includes("password")) return "Şifre en az 6 karakter olmalı.";
     return m;
   }
