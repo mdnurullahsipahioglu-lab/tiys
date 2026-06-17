@@ -44,7 +44,7 @@
         v.querySelector("[data-add]").onclick = () => openForm(null);
         v.querySelectorAll("[data-edit]").forEach(b => b.onclick = e => { e.stopPropagation(); openForm(rows[+b.dataset.edit]); });
         v.querySelectorAll("[data-del]").forEach(b => b.onclick = e => { e.stopPropagation(); if (confirm("Bu kaydı silmek istediğine emin misin?")) { D.remove(opts.coll, rows[+b.dataset.del].id); Forms.toast("Silindi"); refresh(); } });
-        v.querySelectorAll("tbody tr").forEach(tr => tr.onclick = () => openForm(rows[+tr.dataset.i]));
+        v.querySelectorAll("tbody tr").forEach(tr => tr.onclick = () => (opts.onRowClick ? opts.onRowClick(rows[+tr.dataset.i], refresh) : openForm(rows[+tr.dataset.i])));
         Export.wire(v, 'crud', () => ({ file: opts.title, title: "TİYS — " + opts.title, tables: [{ name: opts.title, headers: opts.cols.map(c => c.h), rows: rows.map(r => opts.cols.map(c => Export.clean(c.v(r)))) }] }));
       }
       renderInto(view);
@@ -72,6 +72,7 @@
       : { key: "tur", label: "Ekipman", type: "select", required: true, options: ["Misina", "Zincir", "Koruyucu ekipman", "El aletleri", "Diğer"] };
     const f = [turField, { key: "tarih", label: "Tarih", type: "date", required: true }, { key: "tutar", label: "Tutar (₺)", type: "money", required: true }];
     if (kategori === "genel") f.push({ key: "altKategori", label: "Dağılım Kategorisi", type: "select", options: ALT, hint: "Dashboard grafiği için" });
+    f.push({ key: "tarlaId", label: "Tarla (hangi tarlaya?)", type: "select", options: tarlaOptions(), hint: "Boş bırakırsan genel/tüm işletme gideri sayılır" });
     f.push({ key: "aciklama", label: "Açıklama", type: "textarea", full: true });
     return f;
   }
@@ -111,7 +112,7 @@
     "/gider-yakit": { title: "Yakıt Giderleri", render: giderRoute("yakit", "⛽") },
     "/gider-ekipman": { title: "Ekipman Giderleri", render: giderRoute("ekipman", "🛠️") },
 
-    "/tarlalar": { title: "Tarla Yönetimi", render: crud({ coll: "tarlalar", title: "Tarla Yönetimi", icon: "🗺️", addLabel: "Tarla Ekle", lead: "Tüm tarlalar; alan, çeşit, GPS ve verim", sort: (a, b) => (b.verimPuani || 0) - (a.verimPuani || 0), fields: tarlaFields, cols: [{ h: "Tarla", v: r => r.ad }, { h: "Ürün", v: r => D.urun(r.urun).emoji + " " + D.urun(r.urun).ad }, { h: "Köy", v: r => r.koy || "—" }, { h: "Ada/Parsel", v: r => r.adaParsel || "—" }, { h: "Alan", v: r => (r.alanDekar || 0) + " dekar" }, { h: "Çeşit", v: r => r.cesit || "—" }, { h: "Dikim", v: r => r.dikimYili || "—" }, { h: "Verim", v: r => "%" + (r.verimPuani || 0) }], extraKpi: r => miniKpi("orange", "Toplam Dekar", D.num(r.reduce((a, x) => a + (x.alanDekar || 0), 0))), total: r => null }) },
+    "/tarlalar": { title: "Tarla Yönetimi", render: crud({ coll: "tarlalar", title: "Tarla Yönetimi", icon: "🗺️", addLabel: "Tarla Ekle", lead: "Tarlaya tıkla → gider/gelir dökümü · alan, çeşit, GPS, verim", onRowClick: tarlaDetay, sort: (a, b) => (b.verimPuani || 0) - (a.verimPuani || 0), fields: tarlaFields, cols: [{ h: "Tarla", v: r => r.ad }, { h: "Ürün", v: r => D.urun(r.urun).emoji + " " + D.urun(r.urun).ad }, { h: "Köy", v: r => r.koy || "—" }, { h: "Ada/Parsel", v: r => r.adaParsel || "—" }, { h: "Alan", v: r => (r.alanDekar || 0) + " dekar" }, { h: "Çeşit", v: r => r.cesit || "—" }, { h: "Dikim", v: r => r.dikimYili || "—" }, { h: "Verim", v: r => "%" + (r.verimPuani || 0) }], extraKpi: r => miniKpi("orange", "Toplam Dekar", D.num(r.reduce((a, x) => a + (x.alanDekar || 0), 0))), total: r => null }) },
 
     "/hasat": { title: "Hasat Takip", render: crud({ coll: "hasatlar", title: "Hasat Takip", icon: "🌰", addLabel: "Hasat Kaydı Ekle", lead: "Tarla bazlı yaş/kuru ürün, randıman, nem", fields: hasatFields, compute: d => { const r = (d.yasUrun && d.kuruUrun) ? Math.round(d.kuruUrun / d.yasUrun * 100) : ""; return { randiman: r ? "Randıman: %" + r : "" }; }, computeSave: d => ({ randiman: (d.yasUrun && d.kuruUrun) ? Math.round(d.kuruUrun / d.yasUrun * 100) : d.randiman }), cols: [{ h: "Tarla", v: r => (D.coll("tarlalar").find(t => t.id === r.tarlaId) || {}).ad || "—" }, { h: "Tarih", v: r => dt(r.tarih) }, { h: "Yaş (kg)", v: r => D.num(r.yasUrun) }, { h: "Kuru (kg)", v: r => D.num(r.kuruUrun) }, { h: "Randıman", v: r => "%" + (r.randiman || 0) }, { h: "Nem", v: r => "%" + (r.nem || 0) }] }) },
 
@@ -131,7 +132,7 @@
 
   function giderRoute(kategori, ico) {
     const titles = { genel: "Genel Giderler", makine: "Makine Giderleri", yakit: "Yakıt Giderleri", ekipman: "Ekipman Giderleri" };
-    return crud({ coll: "giderler", title: titles[kategori], icon: ico, addLabel: titles[kategori] + " Ekle", totalLabel: "Toplam", defaults: { kategori, altKategori: kategori === "genel" ? "iscilik" : kategori }, filter: g => g.kategori === kategori, fields: () => giderFields(kategori), total: r => r.reduce((a, x) => a + (x.tutar || 0), 0), cols: [{ h: "Tarih", v: r => dt(r.tarih) }, { h: "Tür", v: r => r.tur }, { h: "Açıklama", v: r => r.aciklama || "—" }, { h: "Tutar", v: r => D.money(r.tutar) }] });
+    return crud({ coll: "giderler", title: titles[kategori], icon: ico, addLabel: titles[kategori] + " Ekle", totalLabel: "Toplam", defaults: { kategori, altKategori: kategori === "genel" ? "iscilik" : kategori }, filter: g => g.kategori === kategori, fields: () => giderFields(kategori), total: r => r.reduce((a, x) => a + (x.tutar || 0), 0), cols: [{ h: "Tarih", v: r => dt(r.tarih) }, { h: "Tür", v: r => r.tur }, { h: "Tarla", v: r => (D.coll("tarlalar").find(t => t.id === r.tarlaId) || {}).ad || "— genel —" }, { h: "Açıklama", v: r => r.aciklama || "—" }, { h: "Tutar", v: r => D.money(r.tutar) }] });
   }
 
   function saatFark(g, c) {
@@ -139,6 +140,109 @@
     const p = s => { const m = String(s).replace(":", ".").match(/(\d+)[.,]?(\d+)?/); return m ? (+m[1]) + (m[2] ? (+m[2]) / 60 : 0) : null; };
     const a = p(g), b = p(c); if (a == null || b == null) return null;
     return Math.round((b - a) * 10) / 10;
+  }
+
+  // ---- Tarla detay: tarla bazlı gider/gelir dökümü ----
+  function escA(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;"); }
+  function bugunISO2() { try { return new Date().toISOString().slice(0, 10); } catch (e) { return "2026-06-17"; } }
+  function tAd(tarlaId) { return (D.coll("tarlalar").find(t => t.id === tarlaId) || {}).ad || ""; }
+  function tarlaGiderForm(kategori, tarlaId, after) {
+    const baslik = { genel: "Genel Gider", makine: "Makine Gideri", yakit: "Yakıt Gideri", ekipman: "Ekipman Gideri" }[kategori] || "Gider";
+    Forms.open({
+      title: baslik + (tAd(tarlaId) ? " — " + tAd(tarlaId) : ""), icon: "🧮",
+      fields: giderFields(kategori),
+      record: { kategori: kategori, tarlaId: tarlaId, altKategori: kategori === "genel" ? "iscilik" : kategori, tarih: bugunISO2() },
+      onSave: data => { data.kategori = kategori; D.add("giderler", data); if (after) after(); }
+    });
+  }
+  function tarlaGelirForm(tarlaId, after) {
+    Forms.open({
+      title: "Hasat / Gelir" + (tAd(tarlaId) ? " — " + tAd(tarlaId) : ""), icon: "💰",
+      fields: gelirFields(),
+      record: { tur: "hasat", tarlaId: tarlaId, tarih: bugunISO2() },
+      onSave: data => { data.tur = data.tur || "hasat"; D.add("gelirler", data); if (after) after(); }
+    });
+  }
+  function tarlaEditForm(rec, after) {
+    Forms.open({
+      title: "Tarla — Düzenle", icon: "🗺️", fields: tarlaFields(), record: rec || {},
+      onSave: data => { if (rec && rec.id) D.update("tarlalar", rec.id, data); else D.add("tarlalar", data); if (after) after(); },
+      onDelete: rec && rec.id ? id => { D.remove("tarlalar", id); if (after) after(); } : null
+    });
+  }
+  function tarlaGiderEkle(tarlaId, after) {
+    const ov = document.createElement("div"); ov.className = "modal-overlay";
+    ov.innerHTML = `<div class="modal" style="max-width:430px">
+      <div class="modal-head"><h3>➕ Gider Ekle — ${escA(tAd(tarlaId))}</h3><button class="x">✕</button></div>
+      <div class="modal-body"><p class="lead" style="margin-top:0">Hangi tür gider ekleyeceksin?</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <button class="btn ghost" data-k="genel">📋 Genel Gider</button>
+          <button class="btn ghost" data-k="makine">⚙️ Makine</button>
+          <button class="btn ghost" data-k="yakit">⛽ Yakıt</button>
+          <button class="btn ghost" data-k="ekipman">🛠️ Ekipman</button>
+        </div></div></div>`;
+    document.body.appendChild(ov);
+    const close = () => ov.remove();
+    ov.querySelector(".x").onclick = close;
+    ov.onclick = e => { if (e.target === ov) close(); };
+    ov.querySelectorAll("[data-k]").forEach(b => b.onclick = () => { close(); tarlaGiderForm(b.dataset.k, tarlaId, after); });
+  }
+  function tarlaDetay(tarla, refreshList) {
+    const ov = document.createElement("div"); ov.className = "modal-overlay";
+    function build() {
+      const gid = D.coll("giderler").filter(g => g.tarlaId === tarla.id);
+      const gel = D.coll("gelirler").filter(g => g.tarlaId === tarla.id);
+      const toplamGider = gid.reduce((a, x) => a + (Number(x.tutar) || 0), 0);
+      const toplamGelir = gel.reduce((a, x) => a + (Number(x.tutar) || 0), 0);
+      const byTur = {}; gid.forEach(g => { const k = g.tur || "Diğer"; byTur[k] = (byTur[k] || 0) + (Number(g.tutar) || 0); });
+      const turRows = Object.keys(byTur).sort((a, b) => byTur[b] - byTur[a]);
+      const hareketler = gid.map(g => Object.assign({ _t: "gider" }, g)).concat(gel.map(g => Object.assign({ _t: "gelir" }, g))).sort((a, b) => new Date(b.tarih) - new Date(a.tarih));
+      return { gid, gel, toplamGider, toplamGelir, net: toplamGelir - toplamGider, byTur, turRows, hareketler };
+    }
+    function render() {
+      const c = build(), u = D.urun(tarla.urun) || {};
+      ov.innerHTML = `<div class="modal">
+        <div class="modal-head"><h3>${u.emoji || "🗺️"} ${escA(tarla.ad)}</h3><button class="x">✕</button></div>
+        <div class="modal-body">
+          <div class="lead" style="margin-top:0">${escA(u.ad || tarla.urun || "")} · ${escA(tarla.koy || "—")} · ${(Number(tarla.alanDekar) || 0)} dekar · ${escA(tarla.cesit || "—")}</div>
+          <div class="kpis" style="grid-template-columns:repeat(3,1fr);margin:12px 0">
+            ${miniKpi("teal", "Gelir", D.money(c.toplamGelir))}${miniKpi("red", "Gider", D.money(c.toplamGider))}${miniKpi(c.net >= 0 ? "blue" : "orange", "Net", D.money(c.net))}
+          </div>
+          <h3 style="margin:8px 0 6px;font-size:15px">🧾 Gider Türlerine Göre Döküm</h3>
+          ${c.turRows.length ? `<table class="t"><thead><tr><th>Gider Türü</th><th style="text-align:right">Tutar</th></tr></thead><tbody>
+            ${c.turRows.map(t => `<tr><td>${escA(t)}</td><td style="text-align:right;font-weight:600">${D.money(c.byTur[t])}</td></tr>`).join("")}
+            <tr style="border-top:2px solid var(--line,#e5e7eb)"><td style="font-weight:700">TOPLAM GİDER</td><td style="text-align:right;font-weight:700;color:var(--red)">${D.money(c.toplamGider)}</td></tr>
+          </tbody></table>` : `<div class="lead">Bu tarlaya henüz gider girilmemiş. Aşağıdan "➕ Gider Ekle" ile başla.</div>`}
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin:14px 0">
+            <button class="btn primary" data-add-gider>➕ Gider Ekle</button>
+            <button class="btn ghost" data-add-gelir>💰 Gelir Ekle</button>
+            <button class="btn ghost" data-edit>✏️ Tarlayı Düzenle</button>
+            ${Export.bar('tarladetay')}
+          </div>
+          ${c.hareketler.length ? `<h3 style="margin:8px 0 6px;font-size:15px">📋 Hareketler (${c.hareketler.length})</h3>
+          <table class="t"><thead><tr><th>Tarih</th><th>İşlem</th><th style="text-align:right">Tutar</th></tr></thead><tbody>
+            ${c.hareketler.map(h => `<tr><td>${dt(h.tarih)}</td><td>${h._t === "gider" ? "🧮 " + escA(h.tur || h.kategori || "Gider") : "💰 " + escA(h.aciklama || "Gelir")}</td><td style="text-align:right;font-weight:600;color:${h._t === "gider" ? "var(--red)" : "var(--teal)"}">${h._t === "gider" ? "−" : "+"}${D.money(h.tutar)}</td></tr>`).join("")}
+          </tbody></table>` : ""}
+        </div>
+        <div class="modal-foot"><div class="right"><button class="btn ghost" data-cancel>Kapat</button></div></div>
+      </div>`;
+      const close = () => ov.remove();
+      ov.querySelector(".x").onclick = close;
+      ov.querySelector("[data-cancel]").onclick = close;
+      ov.querySelector("[data-add-gider]").onclick = () => tarlaGiderEkle(tarla.id, () => { render(); if (refreshList) refreshList(); });
+      ov.querySelector("[data-add-gelir]").onclick = () => tarlaGelirForm(tarla.id, () => { render(); if (refreshList) refreshList(); });
+      ov.querySelector("[data-edit]").onclick = () => { close(); tarlaEditForm(tarla, () => { if (refreshList) refreshList(); }); };
+      Export.wire(ov, 'tarladetay', () => ({
+        file: "TIYS-Tarla-" + tarla.ad, title: "TİYS — " + tarla.ad + " Gider/Gelir Dökümü",
+        tables: [
+          { name: "Gider Türleri", headers: ["Gider Türü", "Tutar (₺)"], rows: c.turRows.map(t => [t, Math.round(c.byTur[t])]).concat([["TOPLAM GİDER", Math.round(c.toplamGider)], ["TOPLAM GELİR", Math.round(c.toplamGelir)], ["NET", Math.round(c.net)]]) },
+          { name: "Hareketler", headers: ["Tarih", "Yön", "Tür/Açıklama", "Tutar (₺)"], rows: c.hareketler.map(h => [dt(h.tarih), h._t === "gider" ? "Gider" : "Gelir", h._t === "gider" ? (h.tur || h.kategori || "") : (h.aciklama || ""), Math.round(Number(h.tutar) || 0)]) }
+        ]
+      }));
+    }
+    ov.onclick = e => { if (e.target === ov) ov.remove(); };
+    document.body.appendChild(ov);
+    render();
   }
 
   function stub(title, lead, ico, points) {
