@@ -137,7 +137,7 @@
      ["2026-12-12", 95000, "Bağ Yolu + Kavak Altı satışı"], ["2026-12-24", 172600, "Söğütlük + Harman Yeri + kalan satış"]
     ].forEach(r => g("hasat", r[0], r[1], r[2]));
     // İşçi kiralama tahsilatları — müşterilerin ödemeleri (gelir olarak işlenir)
-    [["2026-06-15", "Ahmet A.", 40500], ["2026-06-20", "Mehmet B.", 18000], ["2026-06-22", "Hasan C.", 25000], ["2026-06-25", "Veli E.", 15000]]
+    [["2026-06-15", "İşçi 1", 40500], ["2026-06-20", "İşçi 2", 18000], ["2026-06-22", "İşçi 3", 25000], ["2026-06-25", "İşçi 5", 15000]]
       .forEach(r => gelirler.push({ id: uid(), tur: "isciKiralama", tarih: r[0], tutar: r[2], musteri: r[1], aciklama: "Tahsilat — " + r[1] }));
     // Ev kira ~62.500
     for (let m = 0; m < 12; m++) g("evKira", `2026-${String(m + 1).padStart(2, "0")}-05`, 5200, "Aylık ev kirası");
@@ -175,11 +175,11 @@
 
     // İşçi kiralamalar — hakediş = işçi × gün × yevmiye (2026 yevmiye: ₺900)
     const isciKiralamalar = [
-      { id: uid(), tarih: "2026-06-12", musteri: "Ahmet A.", kisi: 15, gun: 3, yevmiye: 900, tutar: 40500 },
-      { id: uid(), tarih: "2026-06-10", musteri: "Mehmet B.", kisi: 10, gun: 2, yevmiye: 900, tutar: 18000 },
-      { id: uid(), tarih: "2026-06-08", musteri: "Hasan C.", kisi: 12, gun: 4, yevmiye: 900, tutar: 43200 },
-      { id: uid(), tarih: "2026-06-05", musteri: "Ali D.", kisi: 18, gun: 2, yevmiye: 900, tutar: 32400 },
-      { id: uid(), tarih: "2026-06-01", musteri: "Veli E.", kisi: 20, gun: 1, yevmiye: 900, tutar: 18000 }
+      { id: uid(), tarih: "2026-06-12", bitis: "2026-06-14", musteri: "İşçi 1", kisi: 15, gun: 3, yevmiye: 900, tutar: 40500 },
+      { id: uid(), tarih: "2026-06-10", bitis: "2026-06-11", musteri: "İşçi 2", kisi: 10, gun: 2, yevmiye: 900, tutar: 18000 },
+      { id: uid(), tarih: "2026-06-08", bitis: "2026-06-11", musteri: "İşçi 3", kisi: 12, gun: 4, yevmiye: 900, tutar: 43200 },
+      { id: uid(), tarih: "2026-06-05", bitis: "2026-06-06", musteri: "İşçi 4", kisi: 18, gun: 2, yevmiye: 900, tutar: 32400 },
+      { id: uid(), tarih: "2026-06-01", bitis: "2026-06-01", musteri: "İşçi 5", kisi: 20, gun: 1, yevmiye: 900, tutar: 18000 }
     ];
 
     return {
@@ -189,7 +189,7 @@
         gelistirici: "Rıfat Sipahioğlu", iletisim: "rsipahi@gmail.com",
         gubreFiyat: 450, iscilikFiyat: 900, mazotFiyat: 42,
         urunFiyat: { findik: 250, zeytin: 40, ceviz: 130, narenciye: 18, uzum: 30, tibbi: 90 },
-        yevmiyeler: { "2026": 900 },
+        yevmiyeler: { "2026": 900 }, grupBuyukluk: 20,
         hasatTarihi: "2026-08-10", konum: { lat: 40.985, lng: 36.742, ad: "Merkez" }
       },
       tarlalar, gelirler, giderler, isler, isciKiralamalar,
