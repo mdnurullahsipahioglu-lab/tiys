@@ -287,7 +287,7 @@
             <input type="file" id="b_file" accept="application/json" class="hidden">
             <button class="btn danger" id="b_reset">♻️ Demo verilere sıfırla</button>
           </div>
-          <p class="lead" style="margin-top:14px">🔒 Tüm veri yalnızca bu cihazda saklanır.</p>
+          <p class="lead" style="margin-top:14px">🔒 Tüm veri yalnızca bu cihazda saklanır.${(window.tiysFS && window.tiysFS.yol) ? ' <b>Masaüstü:</b> verileriniz <code style="font-size:11px">' + String(window.tiysFS.yol()).replace(/</g, "&lt;") + '</code> dosyasında kalıcı tutulur — programı güncellemek/yeniden kurmak verilerinizi SİLMEZ.' : ''}</p>
         </div>
       </div>
       <div class="panel" id="cloudPanel" style="margin-top:14px;max-width:540px"></div>

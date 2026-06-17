@@ -44,8 +44,22 @@
 
   // ---- Depolama ------------------------------------------------------------
   let _data = null;
+  // Masaüstü (Electron) sürümde veri dosyası kullanılıyor mu?
+  function dosyaModu() { return !!(global.tiysFS && global.tiysFS.read && global.tiysFS.write); }
   function load() {
     if (_data) return _data;
+    // Masaüstü: veri Belgeler/TIYS/veri.json'da — kurulum/güncelleme/silmeden ETKİLENMEZ
+    if (dosyaModu()) {
+      try {
+        const raw = global.tiysFS.read();
+        if (raw) { _data = JSON.parse(raw); return _data; }
+        // dosya yok → eski localStorage verisini taşı (varsa), yoksa demo başlat
+        let ls = null; try { ls = localStorage.getItem(KEY); } catch (e) {}
+        _data = ls ? JSON.parse(ls) : seed();
+        save(); // ilk yazımda dosyaya kaydet
+        return _data;
+      } catch (e) { /* dosya hatası → localStorage'a düş */ }
+    }
     try {
       const raw = localStorage.getItem(KEY);
       _data = raw ? JSON.parse(raw) : seed();
@@ -53,7 +67,12 @@
     if (!localStorage.getItem(KEY)) save();
     return _data;
   }
-  function save() { try { localStorage.setItem(KEY, JSON.stringify(_data)); } catch (e) {} try { global.dispatchEvent(new CustomEvent("tiys:save")); } catch (e) {} }
+  function save() {
+    const s = JSON.stringify(_data);
+    try { localStorage.setItem(KEY, s); } catch (e) {}
+    if (dosyaModu()) { try { global.tiysFS.write(s); } catch (e) {} }
+    try { global.dispatchEvent(new CustomEvent("tiys:save")); } catch (e) {}
+  }
   function reset() { _data = seed(); save(); return _data; }
 
   // ---- CRUD yardımcıları ---------------------------------------------------
