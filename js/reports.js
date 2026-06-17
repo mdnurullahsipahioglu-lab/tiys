@@ -22,7 +22,7 @@
     const gelir = DB.toplamGelir(YIL), gider = DB.toplamGider(YIL), net = gelir - gider;
     const tk = tarlaKarlilik();
     view.innerHTML = `
-      <div class="page-head"><div><h2 style="margin:0">Raporlar</h2><div class="lead">Kârlılık · Verimlilik · ${YIL} yılı</div></div></div>
+      <div class="page-head"><div><h2 style="margin:0">Raporlar</h2><div class="lead">Kârlılık · Verimlilik · ${YIL} yılı</div></div><div style="display:flex;gap:8px;flex-wrap:wrap">${Export.bar('rapor')}</div></div>
       <div class="kpis" style="grid-template-columns:repeat(3,1fr);max-width:680px">
         ${rc("teal", "Toplam Gelir", DB.money(gelir))}${rc("red", "Toplam Gider", DB.money(gider))}${rc("blue", "Net Kâr", DB.money(net))}
       </div>
@@ -68,6 +68,15 @@
         { label: "Gider", data: yl.map(y => Math.round(yillar[y].e)), backgroundColor: "#ef4444" },
         { label: "Net", data: yl.map(y => Math.round(yillar[y].g - yillar[y].e)), backgroundColor: "#3b82f6" }] },
       options: { plugins: { legend: { position: "top", align: "end" } }, scales: { y: { ticks: { callback: v => (v / 1000) + "K" } } }, maintainAspectRatio: false }
+    }));
+
+    Export.wire(view, 'rapor', () => ({
+      file: "TIYS-Rapor", title: "TİYS — Kârlılık ve Verimlilik Raporu (" + YIL + ")",
+      tables: [
+        { name: "Özet", headers: ["Kalem", "Tutar (₺)"], rows: [["Toplam Gelir", Math.round(gelir)], ["Toplam Gider", Math.round(gider)], ["Net Kâr", Math.round(net)]] },
+        { name: "Kârlılık", headers: ["Tarla", "Ürün", "Dekar", "Gelir (₺)", "Gider (₺)", "Kâr (₺)"], rows: tk.map(t => [t.ad, (DB.urun(t.urun) || {}).ad || t.urun || "—", t.dekar || 0, Math.round(t.gelir), Math.round(t.gider), Math.round(t.kar)]) },
+        { name: "Verimlilik", headers: ["Tarla", "kg/dekar", "Verim %"], rows: tk.map(t => [t.ad, t.kgDekar || 0, t.verim || 0]) }
+      ]
     }));
   }
   function rc(cls, l, v) { return `<div class="kpi ${cls}" style="min-height:auto;padding:14px"><div class="k-label">${l}</div><div class="k-val" style="font-size:21px">${v}</div></div>`; }

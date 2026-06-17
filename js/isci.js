@@ -31,6 +31,7 @@
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn primary" id="ik_kira">➕ Kiralama Ekle</button>
           <button class="btn ghost" id="ik_tah">💰 Tahsilat Ekle</button>
+          ${Export.bar('ik')}
         </div>
       </div>
 
@@ -68,6 +69,10 @@
     view.querySelector("#ik_tah").onclick = () => tahsilatForm(null, "");
     view.querySelector("#ik_yev").onclick = () => yevmiyeForm(yil);
     view.querySelectorAll("tbody tr[data-m]").forEach(tr => tr.onclick = () => musteriDetay(tr.dataset.m));
+    Export.wire(view, 'ik', () => ({
+      file: "TIYS-Isci-Kiralama", title: "TİYS — İşçi Kiralama Borç Hanesi",
+      tables: [{ name: "Müşteri Borç Hanesi", headers: ["Müşteri", "İşçi-Gün", "Hakediş (₺)", "Tahsil (₺)", "Kalan Borç (₺)", "Durum"], rows: ozet.map(o => [o.musteri, o.isciGun, Math.round(o.hakedis), Math.round(o.tahsil), Math.round(o.kalan), o.kalan > 0.5 ? "Borçlu" : "Kapandı"]) }]
+    }));
   }
 
   // ---- Yevmiye düzenle ----

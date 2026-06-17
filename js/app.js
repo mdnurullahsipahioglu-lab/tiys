@@ -32,7 +32,7 @@
         const total = opts.total ? opts.total(rows) : null;
         v.innerHTML = `
           <div class="page-head"><div><h2 style="margin:0">${opts.title}</h2><div class="lead">${opts.lead || ""}</div></div>
-            <button class="btn primary" data-add>➕ ${opts.addLabel || "Yeni Kayıt"}</button></div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${Export.bar('crud')}<button class="btn primary" data-add>➕ ${opts.addLabel || "Yeni Kayıt"}</button></div></div>
           ${total != null ? `<div class="kpis" style="grid-template-columns:repeat(3,1fr);max-width:600px">
             ${miniKpi("teal", opts.totalLabel || "Toplam", D.money(total))}${miniKpi("blue", "Kayıt", D.num(rows.length))}${opts.extraKpi ? opts.extraKpi(rows) : ""}</div>` : ""}
           <div class="panel" style="margin-top:14px">
@@ -45,6 +45,7 @@
         v.querySelectorAll("[data-edit]").forEach(b => b.onclick = e => { e.stopPropagation(); openForm(rows[+b.dataset.edit]); });
         v.querySelectorAll("[data-del]").forEach(b => b.onclick = e => { e.stopPropagation(); if (confirm("Bu kaydı silmek istediğine emin misin?")) { D.remove(opts.coll, rows[+b.dataset.del].id); Forms.toast("Silindi"); refresh(); } });
         v.querySelectorAll("tbody tr").forEach(tr => tr.onclick = () => openForm(rows[+tr.dataset.i]));
+        Export.wire(v, 'crud', () => ({ file: opts.title, title: "TİYS — " + opts.title, tables: [{ name: opts.title, headers: opts.cols.map(c => c.h), rows: rows.map(r => opts.cols.map(c => Export.clean(c.v(r)))) }] }));
       }
       renderInto(view);
     };
@@ -173,6 +174,9 @@
         <div class="panel"><h3>☁️ Yedekleme & Veri</h3>
           <p class="lead" style="margin-top:0">Bulut senkronu eklenene kadar verini JSON dosyası olarak yedekleyip başka cihaza taşıyabilirsin.</p>
           <div style="display:flex;flex-direction:column;gap:10px">
+            <button class="btn ghost" id="b_xls">📊 Tüm Verileri Excel'e Aktar</button>
+            <button class="btn ghost" id="b_xls_imp">📥 Excel'den İçe Aktar (yedek/düzenleme)</button>
+            <input type="file" id="b_xls_file" accept=".xlsx,.xls" class="hidden">
             <button class="btn ghost" id="b_export">⬇️ Yedek Al (JSON indir)</button>
             <button class="btn ghost" id="b_import">⬆️ Yedek Yükle (JSON)</button>
             <input type="file" id="b_file" accept="application/json" class="hidden">
@@ -198,6 +202,34 @@
       });
       D.save(); Forms.toast("Ayarlar kaydedildi ✓");
       document.getElementById("userName").textContent = d.ayarlar.yonetici || "Yönetici";
+    };
+    const XLS_KOLL = [["tarlalar", "Tarlalar"], ["gelirler", "Gelirler"], ["giderler", "Giderler"], ["hasatlar", "Hasatlar"], ["isTakip", "İş Takibi"], ["puantaj", "Puantaj"], ["isciKiralamalar", "İşçi Kiralamalar"]];
+    view.querySelector("#b_xls").onclick = () => {
+      const d = D.load();
+      const tables = XLS_KOLL.filter(k => Array.isArray(d[k[0]]) && d[k[0]].length).map(k => {
+        const arr = d[k[0]], keys = [];
+        arr.forEach(o => Object.keys(o).forEach(kk => { if (keys.indexOf(kk) < 0) keys.push(kk); }));
+        return { name: k[1], headers: keys, rows: arr.map(o => keys.map(kk => (o[kk] == null ? "" : o[kk]))) };
+      });
+      if (!tables.length) { Forms.toast("Aktarılacak veri yok"); return; }
+      Export.excel("TIYS-TumVeri", tables);
+      Forms.toast("Excel indirildi ✓");
+    };
+    view.querySelector("#b_xls_imp").onclick = () => view.querySelector("#b_xls_file").click();
+    view.querySelector("#b_xls_file").onchange = e => {
+      const file = e.target.files[0]; if (!file) return;
+      Export.importExcel(file, (err, sheets) => {
+        e.target.value = "";
+        if (err) { alert("Excel okunamadı: " + err.message); return; }
+        const MAP = {}; XLS_KOLL.forEach(k => MAP[k[1]] = k[0]);
+        const apply = [];
+        Object.keys(sheets).forEach(sn => { const key = MAP[sn]; if (key && Array.isArray(sheets[sn]) && sheets[sn].length) apply.push([key, sn, sheets[sn]]); });
+        if (!apply.length) { alert("Excel'de tanınan sayfa yok.\nSayfa adları şunlardan olmalı: " + XLS_KOLL.map(k => k[1]).join(", ") + ".\n(Önce 'Tüm Verileri Excel'e Aktar' ile örnek dosya alabilirsin.)"); return; }
+        if (!confirm(apply.map(a => a[1]).join(", ") + " sayfaları içe aktarılacak. Bu tablolardaki MEVCUT veriler Excel'dekiyle DEĞİŞTİRİLECEK. Devam edilsin mi?")) return;
+        const d = D.load();
+        apply.forEach(a => { a[2].forEach(o => { if (!o.id) o.id = "imp_" + Math.random().toString(36).slice(2, 9); }); d[a[0]] = a[2]; });
+        D.save(); Forms.toast(apply.length + " tablo içe aktarıldı ✓"); FIYS.route();
+      });
     };
     view.querySelector("#b_export").onclick = () => {
       const blob = new Blob([D.exportJSON()], { type: "application/json" });
