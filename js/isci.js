@@ -12,6 +12,10 @@
   function aktifYil() { let y; try { y = new Date().getFullYear(); } catch (e) { y = 2026; } return String(y); }
   function yilOf(tarih) { const s = String(tarih || ""); return s.length >= 4 ? s.slice(0, 4) : aktifYil(); }
   function esc(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;"); }
+  function gunFark(b, c) { if (!b || !c) return null; const d1 = new Date(b), d2 = new Date(c); if (isNaN(d1.getTime()) || isNaN(d2.getTime())) return null; const diff = Math.floor((d2 - d1) / 86400000) + 1; return diff > 0 ? diff : null; }
+  function grupBuyuk() { const a = D.load().ayarlar || {}; return Number(a.grupBuyukluk) || 0; }
+  function setGrupBuyuk(n) { const d = D.load(); d.ayarlar = d.ayarlar || {}; d.ayarlar.grupBuyukluk = Number(n) || 0; D.save(); }
+  function araliktan(rec) { return dt(rec.tarih) + (rec.bitis && rec.bitis !== rec.tarih ? " – " + dt(rec.bitis) : ""); }
 
   let _view = null;
   function refresh() { if (_view) render(_view); }
@@ -23,26 +27,32 @@
     const toplamTahsil = ozet.reduce((a, x) => a + x.tahsil, 0);
     const toplamKalan = toplamHakedis - toplamTahsil;
     const borclu = ozet.filter(o => o.kalan > 0.5).length;
-    const yil = aktifYil(), yev = D.yevmiyeFor(yil);
+    const yil = aktifYil(), yev = D.yevmiyeFor(yil), grup = grupBuyuk();
 
     view.innerHTML = `
       <div class="page-head">
-        <div><h2 style="margin:0">İşçi Kiralama</h2><div class="lead">Yıllık yevmiye · müşteri borç hanesi · tahsilat takibi</div></div>
+        <div><h2 style="margin:0">İşçi Kiralama</h2><div class="lead">Grubunu tarih aralığıyla kirala · müşteri borç hanesi · tahsilat</div></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn primary" id="ik_kira">➕ Kiralama Ekle</button>
+          <button class="btn primary" id="ik_kira">➕ Grup Kirala</button>
           <button class="btn ghost" id="ik_tah">💰 Tahsilat Ekle</button>
           ${Export.bar('ik')}
         </div>
       </div>
 
-      <div class="panel" style="margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-        <div>
-          <div class="lead" style="margin:0">${yil} yılı kişi-gün yevmiyesi</div>
-          <div style="font-size:24px;font-weight:800;color:var(--teal)">${money(yev)} <span style="font-size:13px;font-weight:500;color:var(--muted)">/ kişi / gün</span></div>
-          <div class="lead" style="margin-top:2px">Yeni kiralamalarda işçilik = işçi × gün × bu tutar (her kayıtta değiştirilebilir)</div>
+      <div class="panel" style="margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+        <div style="display:flex;gap:30px;flex-wrap:wrap">
+          <div>
+            <div class="lead" style="margin:0">👥 Grubum</div>
+            <div style="font-size:24px;font-weight:800;color:var(--teal)">${grup ? grup : "—"} <span style="font-size:13px;font-weight:500;color:var(--muted)">kişi</span></div>
+          </div>
+          <div>
+            <div class="lead" style="margin:0">${yil} kişi-gün yevmiyesi</div>
+            <div style="font-size:24px;font-weight:800;color:var(--teal)">${money(yev)} <span style="font-size:13px;font-weight:500;color:var(--muted)">/ kişi / gün</span></div>
+          </div>
         </div>
-        <button class="btn ghost" id="ik_yev">✏️ Yevmiyeyi Düzenle</button>
+        <button class="btn ghost" id="ik_grup">✏️ Grup &amp; Yevmiye</button>
       </div>
+      ${!grup ? `<div class="lead" style="margin:-6px 0 12px;color:var(--orange)">💡 Önce "Grup &amp; Yevmiye" ile grubundaki işçi sayısını gir; kiralamada otomatik gelsin.</div>` : ""}
 
       <div class="kpis" style="grid-template-columns:repeat(3,1fr);max-width:720px;margin-bottom:14px">
         ${miniKpi("teal", "Toplam Hakediş", money(toplamHakedis))}
@@ -67,7 +77,7 @@
 
     view.querySelector("#ik_kira").onclick = () => kiralamaForm(null, "");
     view.querySelector("#ik_tah").onclick = () => tahsilatForm(null, "");
-    view.querySelector("#ik_yev").onclick = () => yevmiyeForm(yil);
+    view.querySelector("#ik_grup").onclick = () => grupForm(yil);
     view.querySelectorAll("tbody tr[data-m]").forEach(tr => tr.onclick = () => musteriDetay(tr.dataset.m));
     Export.wire(view, 'ik', () => ({
       file: "TIYS-Isci-Kiralama", title: "TİYS — İşçi Kiralama Borç Hanesi",
@@ -75,34 +85,40 @@
     }));
   }
 
-  // ---- Yevmiye düzenle ----
-  function yevmiyeForm(yil) {
+  // ---- Grup & Yevmiye düzenle ----
+  function grupForm(yil) {
     Forms.open({
-      title: "Yıllık Kişi-Gün Yevmiyesi", icon: "✏️",
-      record: { yil: yil, yevmiye: D.yevmiyeFor(yil) },
+      title: "Grup & Yevmiye Ayarları", icon: "👥",
+      record: { grup: grupBuyuk() || "", yil: yil, yevmiye: D.yevmiyeFor(yil) },
       fields: [
+        { key: "grup", label: "Grubumdaki İşçi Sayısı", type: "number", required: true, hint: "Yeni kiralamalarda işçi sayısı buradan gelir (ör. 20)" },
         { key: "yil", label: "Yıl", type: "number", required: true, step: "1" },
-        { key: "yevmiye", label: "Kişi-Gün Yevmiye (₺)", type: "money", required: true, hint: "Bir işçinin bir günlük ücreti" }
+        { key: "yevmiye", label: "Kişi-Gün Yevmiye (₺)", type: "money", required: true, hint: "Bir işçinin bir günlük ücreti (o yıl için)" }
       ],
-      onSave: d => { D.setYevmiye(String(d.yil), d.yevmiye); refresh(); Forms.toast("Yevmiye kaydedildi ✓"); }
+      onSave: d => { setGrupBuyuk(d.grup); D.setYevmiye(String(d.yil), d.yevmiye); refresh(); Forms.toast("Grup ayarları kaydedildi ✓"); }
     });
   }
 
-  // ---- Kiralama ekle/düzenle (alacak) ----
+  // ---- Grup kiralama ekle/düzenle (alacak) — tarih aralığı modeli ----
   function kiralamaForm(rec, presetMusteri) {
     const yil = rec && rec.tarih ? yilOf(rec.tarih) : aktifYil();
+    const grup = grupBuyuk();
     Forms.open({
-      title: "İşçi Kiralama", icon: "🧾",
-      record: rec || { tarih: bugunISO(), musteri: presetMusteri || "", gun: 1, yevmiye: D.yevmiyeFor(yil) },
+      title: "Grup Kiralama", icon: "🧾",
+      record: rec || { tarih: bugunISO(), bitis: bugunISO(), musteri: presetMusteri || "", kisi: grup || "", yevmiye: D.yevmiyeFor(yil) },
       fields: [
-        { key: "musteri", label: "Müşteri", type: "text", required: true, datalist: D.musteriList(), placeholder: "Ad Soyad" },
-        { key: "tarih", label: "Tarih", type: "date", required: true },
-        { key: "kisi", label: "İşçi Sayısı", type: "number", required: true, placeholder: "ör. 12" },
-        { key: "gun", label: "Gün Sayısı", type: "number", required: true, placeholder: "ör. 3" },
-        { key: "yevmiye", label: "Kişi-Gün Yevmiye (₺)", type: "money", required: true, calc: true, hint: "Yıl yevmiyesinden geldi; değiştirebilirsin" }
+        { key: "musteri", label: "Müşteri (grubu kiralayan)", type: "text", required: true, datalist: D.musteriList(), placeholder: "Ad Soyad" },
+        { key: "tarih", label: "Başlangıç Tarihi", type: "date", required: true },
+        { key: "bitis", label: "Bitiş Tarihi", type: "date", required: true },
+        { key: "kisi", label: "İşçi Sayısı", type: "number", required: true, hint: grup ? ("Grubun varsayılanı: " + grup + " kişi") : "Kaç işçi gitti?" },
+        { key: "yevmiye", label: "Kişi-Gün Yevmiye (₺)", type: "money", required: true, calc: true, hint: "Bu yılın işçilik bedeli (gerekirse değiştir)" }
       ],
-      compute: d => ({ yevmiye: "Toplam işçilik = " + money((d.kisi || 0) * (d.gun || 0) * (d.yevmiye || 0)) }),
-      computeSave: d => ({ tutar: (d.kisi || 0) * (d.gun || 0) * (d.yevmiye || 0) }),
+      compute: d => {
+        const g = gunFark(d.tarih, d.bitis);
+        if (g == null) return { yevmiye: "⚠️ Başlangıç ve bitiş tarihini gir" };
+        return { yevmiye: g + " gün × " + (d.kisi || 0) + " işçi × " + money(d.yevmiye || 0) + "  =  " + money((d.kisi || 0) * g * (d.yevmiye || 0)) };
+      },
+      computeSave: d => { const g = gunFark(d.tarih, d.bitis) || 0; return { gun: g, tutar: (d.kisi || 0) * g * (d.yevmiye || 0) }; },
       onSave: data => {
         if (rec && rec.id) D.update("isciKiralamalar", rec.id, data); else D.add("isciKiralamalar", data);
         refresh();
@@ -160,7 +176,7 @@
         </div>
         <table class="t"><thead><tr><th>Tarih</th><th>İşlem</th><th>Detay</th><th>Tutar</th><th></th></tr></thead>
         <tbody>${hareketler.length ? hareketler.map(h => h._t === "kira"
-          ? `<tr><td>${dt(h.tarih)}</td><td>🧾 Kiralama</td><td>${num(h.kisi)} işçi × ${num(h.gun)} gün × ${money(h.yevmiye)}</td><td style="color:var(--orange);font-weight:600">+${money(h.tutar)}</td><td><button class="icon-act" data-ek="${h.id}">✏️</button></td></tr>`
+          ? `<tr><td>${araliktan(h)}</td><td>🧾 Kiralama</td><td>${num(h.kisi)} işçi × ${num(h.gun)} gün × ${money(h.yevmiye)}</td><td style="color:var(--orange);font-weight:600">+${money(h.tutar)}</td><td><button class="icon-act" data-ek="${h.id}">✏️</button></td></tr>`
           : `<tr><td>${dt(h.tarih)}</td><td>💰 Tahsilat</td><td>${esc(h.not || h.aciklama || "—")}</td><td style="color:var(--teal);font-weight:600">−${money(h.tutar)}</td><td><button class="icon-act" data-et="${h.id}">✏️</button></td></tr>`
         ).join("") : `<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:18px">Kayıt yok</td></tr>`}</tbody></table>
       </div>
@@ -195,7 +211,7 @@
     L.push("Müşteri: " + m);
     L.push("");
     L.push("KİRALAMALAR (Hakediş)");
-    kira.forEach(k => L.push("• " + D.dateTR(k.tarih) + "  " + num(k.kisi) + " işçi x " + num(k.gun) + " gün x " + money(k.yevmiye) + " = " + money(k.tutar)));
+    kira.forEach(k => L.push("• " + araliktan(k) + "  " + num(k.kisi) + " işçi x " + num(k.gun) + " gün x " + money(k.yevmiye) + " = " + money(k.tutar)));
     L.push("Toplam Hakediş: " + money(hakedis));
     L.push("");
     L.push("TAHSİLATLAR (Ödeme)");
@@ -214,7 +230,7 @@
       <div style="font-size:16px;font-weight:700;margin-bottom:10px">👤 ${esc(m)}</div>
       <table style="width:100%;border-collapse:collapse;font-size:13px">
         <tr style="background:#f3f4f6"><td colspan="2" style="text-align:left;padding:6px 8px;font-weight:700">Kiralamalar (Hakediş)</td></tr>
-        ${kira.map(k => satir(D.dateTR(k.tarih) + " · " + num(k.kisi) + " işçi × " + num(k.gun) + " gün × " + money(k.yevmiye), money(k.tutar))).join("")}
+        ${kira.map(k => satir(araliktan(k) + " · " + num(k.kisi) + " işçi × " + num(k.gun) + " gün × " + money(k.yevmiye), money(k.tutar))).join("")}
         ${satir("Toplam Hakediş", money(hakedis), true)}
         <tr style="background:#f3f4f6"><td colspan="2" style="text-align:left;padding:6px 8px;font-weight:700">Tahsilatlar (Ödeme)</td></tr>
         ${tah.length ? tah.map(t => satir(D.dateTR(t.tarih) + (t.not ? " · " + esc(t.not) : ""), money(t.tutar))).join("") : `<tr><td colspan="2" style="padding:5px 8px;color:#888">Ödeme yok</td></tr>`}
