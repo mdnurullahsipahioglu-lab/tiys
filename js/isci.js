@@ -71,7 +71,7 @@
             <td style="font-weight:700;color:${o.kalan > 0.5 ? "var(--orange)" : "var(--teal)"}">${money(o.kalan)}</td>
             <td>${o.kalan > 0.5 ? "🔴 Borçlu" : "🟢 Kapandı"}</td>
           </tr>`).join("")}</tbody></table>
-          <div class="lead" style="margin-top:10px">💡 Bir müşteriye tıkla → kiralama/ödeme geçmişi ve hızlı tahsilat.</div>`
+          <div class="lead" style="margin-top:10px">💡 Müşteriye tıkla → geçmiş, hızlı tahsilat, ismi değiştir veya müşteriyi sil.</div>`
           : `<div class="empty"><div class="e-ico">🧾</div>Henüz kiralama kaydı yok.<br>"➕ Kiralama Ekle" ile başla.</div>`}
       </div>`;
 
@@ -180,7 +180,7 @@
           : `<tr><td>${dt(h.tarih)}</td><td>💰 Tahsilat</td><td>${esc(h.not || h.aciklama || "—")}</td><td style="color:var(--teal);font-weight:600">−${money(h.tutar)}</td><td><button class="icon-act" data-et="${h.id}">✏️</button></td></tr>`
         ).join("") : `<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:18px">Kayıt yok</td></tr>`}</tbody></table>
       </div>
-      <div class="modal-foot"><button class="btn ghost" data-ekstre>📄 Ekstre / Paylaş</button><div class="right"><button class="btn ghost" data-cancel>Kapat</button></div></div>
+      <div class="modal-foot"><button class="btn ghost" data-ad>✏️ İsmi Değiştir</button><button class="btn danger" data-msil>🗑️ Müşteriyi Sil</button><div class="right"><button class="btn ghost" data-ekstre>📄 Ekstre</button><button class="btn ghost" data-cancel>Kapat</button></div></div>
     </div>`;
     document.body.appendChild(ov);
     const close = () => ov.remove();
@@ -188,10 +188,40 @@
     ov.querySelector("[data-cancel]").onclick = close;
     ov.onclick = e => { if (e.target === ov) close(); };
     ov.querySelector("[data-ekstre]").onclick = () => { close(); musteriEkstre(m); };
+    ov.querySelector("[data-ad]").onclick = () => { close(); musteriAdiDegistir(m, () => refresh()); };
+    ov.querySelector("[data-msil]").onclick = () => musteriSil(m, () => { close(); refresh(); });
     ov.querySelector("[data-add-kira]").onclick = () => { close(); kiralamaForm(null, m); };
     ov.querySelector("[data-add-tah]").onclick = () => { close(); tahsilatForm(null, m); };
     ov.querySelectorAll("[data-ek]").forEach(b => b.onclick = () => { close(); kiralamaForm(D.coll("isciKiralamalar").find(x => x.id === b.dataset.ek), m); });
     ov.querySelectorAll("[data-et]").forEach(b => b.onclick = () => { close(); tahsilatForm(D.tahsilatlar().find(x => x.id === b.dataset.et), m); });
+  }
+
+  // ---- Müşteri adını değiştir (tüm kayıtlarda) ----
+  function musteriAdiDegistir(eski, after) {
+    Forms.open({
+      title: "Müşteri Adını Değiştir", icon: "✏️",
+      record: { musteri: eski },
+      fields: [{ key: "musteri", label: "Yeni Müşteri Adı", type: "text", required: true, full: true, hint: '"' + eski + '" → tüm kiralama ve tahsilat kayıtlarında güncellenir' }],
+      onSave: data => {
+        const yeni = String(data.musteri || "").trim();
+        if (!yeni || yeni === eski) { if (after) after(); return; }
+        const d = D.load();
+        (d.isciKiralamalar || []).forEach(k => { if (String(k.musteri || "").trim() === eski) k.musteri = yeni; });
+        (d.gelirler || []).forEach(g => { if (g.tur === "isciKiralama" && String(g.musteri || "").trim() === eski) g.musteri = yeni; });
+        D.save(); Forms.toast("Müşteri adı güncellendi ✓"); if (after) after();
+      }
+    });
+  }
+  // ---- Müşteriyi sil (tüm kiralama + tahsilat kayıtları) ----
+  function musteriSil(musteri, after) {
+    const d0 = D.load();
+    const kSay = (d0.isciKiralamalar || []).filter(k => String(k.musteri || "").trim() === musteri).length;
+    const tSay = (d0.gelirler || []).filter(g => g.tur === "isciKiralama" && String(g.musteri || "").trim() === musteri).length;
+    if (!confirm('"' + musteri + '" müşterisi silinecek.\n\n' + kSay + " kiralama + " + tSay + " tahsilat kaydı KALICI olarak silinir. Emin misin?")) return;
+    const d = D.load();
+    d.isciKiralamalar = (d.isciKiralamalar || []).filter(k => String(k.musteri || "").trim() !== musteri);
+    d.gelirler = (d.gelirler || []).filter(g => !(g.tur === "isciKiralama" && String(g.musteri || "").trim() === musteri));
+    D.save(); Forms.toast(musteri + " silindi"); if (after) after();
   }
 
   // ---- Müşteri ekstresi (yazdır / WhatsApp / kopyala) ----
