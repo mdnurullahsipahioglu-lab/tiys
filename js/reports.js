@@ -4,6 +4,7 @@
   const YIL = 2026;
   let _charts = [];
   function destroy() { _charts.forEach(c => { try { c.destroy(); } catch (e) {} }); _charts = []; }
+  function escR(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;"); }
 
   // Tarla bazlı tahmini kârlılık (gelir = son verim × dekar × satış fiyatı; gider = dekar payı)
   function tarlaKarlilik() {
@@ -21,6 +22,7 @@
     destroy();
     const gelir = DB.toplamGelir(YIL), gider = DB.toplamGider(YIL), net = gelir - gider;
     const tk = tarlaKarlilik();
+    const tarlalar = DB.coll("tarlalar");
     view.innerHTML = `
       <div class="page-head"><div><h2 style="margin:0">Raporlar</h2><div class="lead">Kârlılık · Verimlilik · ${YIL} yılı</div></div><div style="display:flex;gap:8px;flex-wrap:wrap">${Export.bar('rapor')}</div></div>
       <div class="kpis" style="grid-template-columns:repeat(3,1fr);max-width:680px">
@@ -42,6 +44,20 @@
         <div class="panel"><h3>📈 Yıllık Karşılaştırma</h3>
           <div style="position:relative;height:240px"><canvas id="yilChart"></canvas></div>
           <p class="lead" style="margin-top:8px">Veri biriktikçe 5–10 yıllık karşılaştırma otomatik dolacak.</p></div>
+      </div>
+      <div class="panel" style="margin-top:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:4px">
+          <h3 style="margin:0">🗺️ Tarla Bazlı Gider Sorgu</h3>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <select id="rTarlaSec" style="padding:8px 11px;border:1px solid var(--line,#d1d5db);border-radius:9px;font-family:inherit;font-size:13px;background:#fff;color:var(--ink,#111)">
+              <option value="__all">📊 Tüm Tarlalar (özet)</option>
+              ${tarlalar.map(t => `<option value="${escR(t.id)}">${escR(t.ad)}</option>`).join("")}
+            </select>
+            ${Export.bar('rtarla')}
+          </div>
+        </div>
+        <p class="lead" style="margin-top:0">Bir tarla seç → o tarlada hangi gider türünden ne kadar harcandığını gör. "Tüm Tarlalar" tüm tarlaların gider toplamını listeler.</p>
+        <div id="rTarlaGider" style="margin-top:8px"></div>
       </div>`;
 
     _charts.push(new Chart(document.getElementById("karChart"), {
@@ -78,6 +94,45 @@
         { name: "Verimlilik", headers: ["Tarla", "kg/dekar", "Verim %"], rows: tk.map(t => [t.ad, t.kgDekar || 0, t.verim || 0]) }
       ]
     }));
+
+    function rTarlaRender() {
+      const sel = view.querySelector("#rTarlaSec").value, box = view.querySelector("#rTarlaGider"), gid = DB.coll("giderler");
+      if (sel === "__all") {
+        const map = {}; let genel = 0;
+        gid.forEach(g => { if (g.tarlaId) map[g.tarlaId] = (map[g.tarlaId] || 0) + (Number(g.tutar) || 0); else genel += (Number(g.tutar) || 0); });
+        const rows = DB.coll("tarlalar").map(t => ({ ad: t.ad, tutar: map[t.id] || 0 })).filter(r => r.tutar > 0).sort((a, b) => b.tutar - a.tutar);
+        const toplam = rows.reduce((a, x) => a + x.tutar, 0) + genel;
+        box.innerHTML = (rows.length || genel > 0) ? `<table class="t"><thead><tr><th>Tarla</th><th style="text-align:right">Toplam Gider</th></tr></thead><tbody>
+          ${rows.map(r => `<tr><td>${escR(r.ad)}</td><td style="text-align:right;font-weight:600">${DB.money(r.tutar)}</td></tr>`).join("")}
+          ${genel > 0 ? `<tr><td style="color:var(--muted)">— Tarlasız (genel) —</td><td style="text-align:right">${DB.money(genel)}</td></tr>` : ""}
+          <tr style="border-top:2px solid var(--line,#e5e7eb)"><td style="font-weight:700">TOPLAM</td><td style="text-align:right;font-weight:700;color:var(--red)">${DB.money(toplam)}</td></tr>
+        </tbody></table>` : `<div class="lead">Henüz tarlaya bağlı gider girilmemiş. Gider eklerken "Tarla" seç ya da Tarla Yönetimi → tarlaya tıkla → Gider Ekle.</div>`;
+      } else {
+        const f = gid.filter(g => g.tarlaId === sel), byTur = {};
+        f.forEach(g => { const k = g.tur || "Diğer"; byTur[k] = (byTur[k] || 0) + (Number(g.tutar) || 0); });
+        const keys = Object.keys(byTur).sort((a, b) => byTur[b] - byTur[a]), toplam = keys.reduce((a, k) => a + byTur[k], 0);
+        box.innerHTML = keys.length ? `<table class="t"><thead><tr><th>Gider Türü</th><th style="text-align:right">Tutar</th></tr></thead><tbody>
+          ${keys.map(k => `<tr><td>${escR(k)}</td><td style="text-align:right;font-weight:600">${DB.money(byTur[k])}</td></tr>`).join("")}
+          <tr style="border-top:2px solid var(--line,#e5e7eb)"><td style="font-weight:700">TOPLAM</td><td style="text-align:right;font-weight:700;color:var(--red)">${DB.money(toplam)}</td></tr>
+        </tbody></table>` : `<div class="lead">Bu tarlaya bağlı gider yok.</div>`;
+      }
+    }
+    view.querySelector("#rTarlaSec").onchange = rTarlaRender;
+    rTarlaRender();
+    Export.wire(view, 'rtarla', () => {
+      const sel = view.querySelector("#rTarlaSec").value, gid = DB.coll("giderler");
+      if (sel === "__all") {
+        const map = {}; let genel = 0;
+        gid.forEach(g => { if (g.tarlaId) map[g.tarlaId] = (map[g.tarlaId] || 0) + (Number(g.tutar) || 0); else genel += (Number(g.tutar) || 0); });
+        const rows = DB.coll("tarlalar").map(t => [t.ad, Math.round(map[t.id] || 0)]).filter(r => r[1] > 0).sort((a, b) => b[1] - a[1]);
+        if (genel > 0) rows.push(["— Tarlasız (genel) —", Math.round(genel)]);
+        return { file: "TIYS-Tarla-Gider-Ozet", title: "TİYS — Tarla Bazlı Gider Özeti", tables: [{ name: "Tarla Giderleri", headers: ["Tarla", "Toplam Gider (₺)"], rows }] };
+      }
+      const t = DB.coll("tarlalar").find(x => x.id === sel) || {}, f = gid.filter(g => g.tarlaId === sel), byTur = {};
+      f.forEach(g => { const k = g.tur || "Diğer"; byTur[k] = (byTur[k] || 0) + (Number(g.tutar) || 0); });
+      const rows = Object.keys(byTur).sort((a, b) => byTur[b] - byTur[a]).map(k => [k, Math.round(byTur[k])]);
+      return { file: "TIYS-Tarla-Gider-" + (t.ad || ""), title: "TİYS — " + (t.ad || "Tarla") + " Gider Dökümü", tables: [{ name: "Gider Türleri", headers: ["Gider Türü", "Tutar (₺)"], rows }] };
+    });
   }
   function rc(cls, l, v) { return `<div class="kpi ${cls}" style="min-height:auto;padding:14px"><div class="k-label">${l}</div><div class="k-val" style="font-size:21px">${v}</div></div>`; }
 

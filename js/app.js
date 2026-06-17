@@ -408,7 +408,19 @@
     const a = D.load().ayarlar; if (a.yonetici) document.getElementById("userName").textContent = a.yonetici;
   }
 
-  global.FIYS = { toggleSidebar, closeSidebar, route };
+  function cikisYap() {
+    closeSidebar();
+    if (!confirm("TİYS'ten çıkmak istiyor musunuz? (Verileriniz bu cihazda saklı kalır)")) return;
+    try { if (typeof Cloud !== "undefined" && Cloud.status && Cloud.status().loggedIn) Cloud.signOut(); } catch (e) {}
+    try { window.close(); } catch (e) {}
+    setTimeout(function () {
+      if (!document.hidden) {
+        document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:system-ui,Arial,sans-serif;color:#475569;text-align:center;padding:24px"><div><div style="font-size:54px">🌰</div><h2 style="margin:10px 0 6px;color:#166534">TİYS kapatıldı</h2><p style="margin:0 0 16px;max-width:320px">Programdan çıktınız. Pencereyi kapatabilir veya yeniden başlatabilirsiniz.</p><button onclick="location.reload()" style="padding:11px 22px;border:0;border-radius:10px;background:#16a34a;color:#fff;font-size:15px;font-weight:600;cursor:pointer">↻ Yeniden Aç</button></div></div>';
+      }
+    }, 250);
+  }
+
+  global.FIYS = { toggleSidebar, closeSidebar, route, cikisYap };
   window.addEventListener("hashchange", route);
   function boot() { D.load(); initNav(); route(); }
   if (document.readyState === "loading") window.addEventListener("DOMContentLoaded", boot); else boot();
