@@ -464,8 +464,22 @@
     }, 250);
   }
 
-  global.FIYS = { toggleSidebar, closeSidebar, route, cikisYap };
+  // Bulut senkron durum göstergesi (topbar çipi) — babanın "senkron oluyor mu?" sorusuna görünür cevap
+  function senkronGoster() {
+    const el = document.getElementById("cloudChip"); if (!el) return;
+    const s = (typeof Cloud !== "undefined" && Cloud.status) ? Cloud.status() : null;
+    if (!s || !s.configured) { el.style.display = "none"; return; }
+    el.style.display = ""; el.style.cursor = "pointer";
+    el.onclick = function () { location.hash = "#/ayarlar"; };
+    if (!s.loggedIn) { el.innerHTML = "☁️ <span>Senkron kapalı · giriş yap</span>"; el.style.color = "#94a3b8"; return; }
+    if (s.durum === "senkron") { el.innerHTML = "🔄 <span>Senkronize ediliyor…</span>"; el.style.color = "#2563eb"; return; }
+    if (s.durum === "cevrimdisi") { el.innerHTML = "☁️ <span>Çevrimdışı — bağlanınca eşitlenir</span>"; el.style.color = "#d97706"; return; }
+    el.innerHTML = "✅ <span>Senkron açık</span>"; el.style.color = "#16a34a";
+  }
+  window.addEventListener("tiys:cloud", senkronGoster);
+
+  global.FIYS = { toggleSidebar, closeSidebar, route, cikisYap, senkronGoster };
   window.addEventListener("hashchange", route);
-  function boot() { D.load(); initNav(); route(); }
+  function boot() { D.load(); initNav(); route(); senkronGoster(); }
   if (document.readyState === "loading") window.addEventListener("DOMContentLoaded", boot); else boot();
 })(window);
