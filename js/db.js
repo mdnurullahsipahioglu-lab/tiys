@@ -52,12 +52,12 @@
     if (dosyaModu()) {
       try {
         const raw = global.tiysFS.read();
-        if (raw) { _data = JSON.parse(raw); return _data; }
+        if (raw) { _data = JSON.parse(raw); migrate(_data); return _data; }
         // dosya yok → eski localStorage verisini taşı (varsa), yoksa demo başlat
         let ls = null; try { ls = localStorage.getItem(KEY); } catch (e) {}
         _data = ls ? JSON.parse(ls) : seed();
         save(); // ilk yazımda dosyaya kaydet
-        return _data;
+        migrate(_data); return _data;
       } catch (e) { /* dosya hatası → localStorage'a düş */ }
     }
     try {
@@ -65,7 +65,7 @@
       _data = raw ? JSON.parse(raw) : seed();
     } catch (e) { _data = seed(); }
     if (!localStorage.getItem(KEY)) save();
-    return _data;
+    migrate(_data); return _data;
   }
   function save() {
     const s = JSON.stringify(_data);
@@ -74,6 +74,45 @@
     try { global.dispatchEvent(new CustomEvent("tiys:save")); } catch (e) {}
   }
   function reset() { _data = seed(); save(); return _data; }
+
+  // ---- Otomatik veri onarımı (eski Excel import'larından gelen bozuk veriyi düzeltir) ----
+  function migrate(d) {
+    if (!d) return;
+    let degisti = false;
+    // 1) Excel seri-numarası tarihleri (ör. 42797) → gerçek tarih (YYYY-MM-DD). Her açılışta güvenli/idempotent.
+    (d.giderler || []).concat(d.gelirler || []).forEach(x => {
+      if (typeof x.tarih === "number" && x.tarih > 20000 && x.tarih < 90000) {
+        x.tarih = new Date(Math.round((x.tarih - 25569) * 86400000)).toISOString().slice(0, 10);
+        degisti = true;
+      }
+    });
+    // 2) Kategorisiz giderler hiçbir sayfada görünmüyor → "genel" kategori + altKategori ata
+    (d.giderler || []).forEach(x => {
+      if (!x.kategori) {
+        x.kategori = "genel";
+        const t = (x.tur || "").toLowerCase();
+        x.altKategori = /g[üu]bre/.test(t) ? "gubre"
+          : /i[şs]çi|isci|t[ıi]rpan|temizli|toplama|budama|dal|kesim|patoz/.test(t) ? "iscilik" : "diger";
+        degisti = true;
+      }
+    });
+    // 3) Tek seferlik (V1): kullanıcının kendi gider türlerini ayarlara ekle + hava konumunu tarlalarına çek
+    if (d.ayarlar && !(d.meta && d.meta.migrateV1)) {
+      const turler = d.ayarlar.giderTurleri || [];
+      (d.giderler || []).forEach(x => { if (x.kategori === "genel" && x.tur && turler.indexOf(x.tur) < 0) turler.push(x.tur); });
+      if (turler.length) d.ayarlar.giderTurleri = turler;
+      const k = d.ayarlar.konum;
+      const varsayilan = !k || (Math.abs((k.lat || 0) - 40.985) < 0.002 && Math.abs((k.lng || 0) - 36.742) < 0.002);
+      const ts = (d.tarlalar || []).filter(t => t.lat && t.lng);
+      if (varsayilan && ts.length) {
+        d.ayarlar.konum = { ad: (ts[0].koy || "Tarlalar"), lat: +(ts.reduce((a, t) => a + t.lat, 0) / ts.length).toFixed(5), lng: +(ts.reduce((a, t) => a + t.lng, 0) / ts.length).toFixed(5) };
+      }
+      if (!d.meta) d.meta = {};
+      d.meta.migrateV1 = true;
+      degisti = true;
+    }
+    if (degisti) { try { save(); } catch (e) {} }
+  }
 
   // ---- CRUD yardımcıları ---------------------------------------------------
   function coll(name) { const d = load(); if (!d[name]) d[name] = []; return d[name]; }
@@ -122,7 +161,7 @@
 
   // ---- Yedek ---------------------------------------------------------------
   function exportJSON() { return JSON.stringify(load(), null, 2); }
-  function importJSON(str) { try { _data = JSON.parse(str); save(); return true; } catch (e) { return false; } }
+  function importJSON(str) { try { _data = JSON.parse(str); migrate(_data); save(); return true; } catch (e) { return false; } }
 
   // ---- Tohum (mockup'a uygun demo veri) -----------------------------------
   function seed() {

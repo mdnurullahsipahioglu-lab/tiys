@@ -22,8 +22,9 @@
       <div class="page-head"><div><h2 style="margin:0">Hava ve Karar Destek</h2><div class="lead">${k.ad} · Open-Meteo verisiyle akıllı öneriler</div></div></div>
       <div class="panel"><div id="wxLoad" class="empty"><div class="e-ico">🌦️</div>Hava verisi alınıyor…</div></div>`;
 
-    const fc = `https://api.open-meteo.com/v1/forecast?latitude=${k.lat}&longitude=${k.lng}&current=temperature_2m,relative_humidity_2m,precipitation,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max&timezone=auto&forecast_days=7`;
-    const arch = `https://archive-api.open-meteo.com/v1/archive?latitude=${k.lat}&longitude=${k.lng}&start_date=2020-01-01&end_date=2024-12-31&daily=precipitation_sum&timezone=auto`;
+    const yil = new Date().getFullYear();
+    const fc = `https://api.open-meteo.com/v1/forecast?latitude=${k.lat}&longitude=${k.lng}&current=temperature_2m,relative_humidity_2m,precipitation,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max&timezone=auto&forecast_days=16`;
+    const arch = `https://archive-api.open-meteo.com/v1/archive?latitude=${k.lat}&longitude=${k.lng}&start_date=${yil - 10}-01-01&end_date=${yil - 1}-12-31&daily=precipitation_sum,temperature_2m_max,temperature_2m_min&timezone=auto`;
 
     Promise.all([fetch(fc).then(r => r.json()), fetch(arch).then(r => r.json()).catch(() => null)])
       .then(([f, a]) => paint(view, k, f, a))
@@ -42,7 +43,7 @@
     const gubre = sum5 >= 30 ? ["Erteleyin", "Aşırı yağış besinleri yıkar", "red"] : sum5 >= 3 ? ["İdeal", "Hafif yağış besini toprağa indirir", "green"] : ["Uygun", "Kuru — sonrasında sulama düşünün", "orange"];
     const budamaUygun = !donVar && sum5 < 10;
     const hasatT = new Date(DB.load().ayarlar.hasatTarihi);
-    const gunKaldi = Math.max(0, Math.ceil((hasatT - new Date(2026, 5, 13)) / 86400000));
+    const gunKaldi = Math.max(0, Math.ceil((hasatT - new Date()) / 86400000));
 
     // geçmiş yıllar yağış (archive)
     let yilYagis = null;
@@ -50,6 +51,26 @@
       const acc = {};
       a.daily.time.forEach((t, i) => { const y = t.slice(0, 4); acc[y] = (acc[y] || 0) + (a.daily.precipitation_sum[i] || 0); });
       yilYagis = acc;
+    }
+
+    // 17–30 gün mevsimsel öngörü: son 10 yılın aynı takvim günleri ortalaması
+    let mevsimsel = null;
+    if (a && a.daily && a.daily.time && a.daily.temperature_2m_max) {
+      const clim = {};
+      a.daily.time.forEach((t, i) => {
+        const md = t.slice(5);
+        const c = clim[md] || (clim[md] = { tmax: 0, tmin: 0, prec: 0, n: 0 });
+        c.tmax += a.daily.temperature_2m_max[i] || 0; c.tmin += a.daily.temperature_2m_min[i] || 0;
+        c.prec += a.daily.precipitation_sum[i] || 0; c.n++;
+      });
+      const bas = new Date(); bas.setDate(bas.getDate() + 16);
+      const bit = new Date(); bit.setDate(bit.getDate() + 30);
+      let smax = 0, smin = 0, sprec = 0, cnt = 0;
+      for (let dd = new Date(bas); dd <= bit; dd.setDate(dd.getDate() + 1)) {
+        const md = String(dd.getMonth() + 1).padStart(2, "0") + "-" + String(dd.getDate()).padStart(2, "0");
+        const c = clim[md]; if (c && c.n) { smax += c.tmax / c.n; smin += c.tmin / c.n; sprec += c.prec / c.n; cnt++; }
+      }
+      if (cnt) mevsimsel = { ortMax: Math.round(smax / cnt), ortMin: Math.round(smin / cnt), yagis: Math.round(sprec), bas: bas, bit: bit };
     }
 
     view.querySelector(".content") || 0;
@@ -69,7 +90,7 @@
             <div class="risk">📅 Hasata<b>${gunKaldi} gün</b></div>
           </div>
         </div>
-        <div class="panel"><h3>📆 7 Günlük Tahmin</h3>
+        <div class="panel"><h3>📆 16 Günlük Tahmin</h3>
           <div style="display:flex;flex-direction:column;gap:2px">
           ${d.time.map((t, i) => { const [ds, ic] = wmo(d.weather_code[i]); const dt = new Date(t);
             return `<div class="task" style="padding:8px 0"><div style="width:42px;font-weight:600;font-size:12px">${i === 0 ? "Bugün" : GUN[dt.getDay()]}</div>
@@ -92,7 +113,15 @@
         </div>
       </div>
 
-      ${yilYagis ? `<div class="panel" style="margin-top:14px"><h3>📊 Geçmiş Yıllar Yıllık Yağış (mm) — son 5 yıl</h3>
+      ${mevsimsel ? `<div class="panel" style="margin-top:14px"><h3>🔮 17–30 Gün — Mevsimsel Öngörü (son 10 yıl ortalaması)</h3>
+        <p class="lead" style="margin-top:0">16 günlük gerçek tahminin ötesi meteorolojik olarak tahmin <b>edilemez</b>. Aşağıdaki, ${DB.dateTR(mevsimsel.bas)} – ${DB.dateTR(mevsimsel.bit)} arası için son 10 yılın aynı takvim günleri ortalamasıdır (beklenti, kesin tahmin değil).</p>
+        <div class="risk-row">
+          <div class="risk">🌡️ Ort. Gündüz<b>${mevsimsel.ortMax}°C</b></div>
+          <div class="risk">🌙 Ort. Gece<b>${mevsimsel.ortMin}°C</b></div>
+          <div class="risk">🌧️ Beklenen Yağış<b>~${mevsimsel.yagis} mm</b></div>
+        </div></div>` : ""}
+
+      ${yilYagis ? `<div class="panel" style="margin-top:14px"><h3>📊 Geçmiş Yıllar Yıllık Yağış (mm) — son 10 yıl</h3>
         <div style="position:relative;height:220px"><canvas id="yagisChart"></canvas></div>
         <p class="lead" style="margin-top:8px">Kaynak: Open-Meteo arşivi (${k.ad}). Yağış eğilimi gübreleme ve sulama planı için referanstır.</p></div>` : ""}`;
 

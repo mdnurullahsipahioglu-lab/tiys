@@ -60,13 +60,14 @@
   function gelirFields() {
     return [
       { key: "tarih", label: "Tarih", type: "date", required: true },
+      { key: "cesit", label: "Gelir Çeşidi", type: "select", options: (D.load().ayarlar.gelirCesitleri || ["Hasat", "İşçi Kiralama", "Ev Kira", "Diğer"]) },
       { key: "tutar", label: "Tutar (₺)", type: "money", required: true, placeholder: "0" },
       { key: "tarlaId", label: "Tarla (varsa)", type: "select", options: tarlaOptions() },
       { key: "aciklama", label: "Açıklama", type: "textarea", full: true, placeholder: "Not / detay" }
     ];
   }
   function giderFields(kategori) {
-    const turField = kategori === "genel" ? { key: "tur", label: "Gider Türü", type: "select", required: true, options: GENEL_TUR }
+    const turField = kategori === "genel" ? { key: "tur", label: "Gider Türü", type: "select", required: true, options: (D.load().ayarlar.giderTurleri || GENEL_TUR) }
       : kategori === "makine" ? { key: "tur", label: "Makine", type: "select", required: true, options: ["Motorlu tırpan", "Testere", "Patoz", "Traktör", "Diğer"] }
       : kategori === "yakit" ? { key: "tur", label: "Yakıt", type: "select", required: true, options: ["Benzin", "Motorin", "Yağ"] }
       : { key: "tur", label: "Ekipman", type: "select", required: true, options: ["Misina", "Zincir", "Koruyucu ekipman", "El aletleri", "Diğer"] };
@@ -93,8 +94,9 @@
   const hasatFields = () => [
     { key: "tarlaId", label: "Tarla", type: "select", required: true, options: D.coll("tarlalar").map(t => ({ v: t.id, l: t.ad })) },
     { key: "tarih", label: "Hasat Tarihi", type: "date", required: true },
-    { key: "yasUrun", label: "Toplanan Yaş Ürün (kg)", type: "number", required: true },
-    { key: "kuruUrun", label: "Kurutma Sonrası (kg)", type: "number", required: true },
+    { key: "cuval", label: "Çuval Sayısı", type: "number", hint: "Bu tarladan toplanan çuval adedi" },
+    { key: "yasUrun", label: "Toplanan Yaş Ürün (kg)", type: "number" },
+    { key: "kuruUrun", label: "Kurutma Sonrası (kg)", type: "number", hint: "Kuruyunca gir — sonradan da girebilirsin" },
     { key: "nem", label: "Nem Oranı (%)", type: "number" },
     { key: "randiman", label: "Randıman (%)", type: "number", calc: true, hint: "Otomatik: kuru ÷ yaş" }
   ];
@@ -103,9 +105,9 @@
   const routes = {
     "/dashboard": { title: "Dashboard", render: v => Dashboard.render(v) },
 
-    "/gelir-hasat": { title: "Hasat Geliri", render: crud({ coll: "gelirler", title: "Hasat Geliri", icon: "🌾", addLabel: "Hasat Geliri Ekle", totalLabel: "Toplam Hasat Geliri", defaults: { tur: "hasat" }, filter: g => g.tur === "hasat", fields: gelirFields, total: r => r.reduce((a, x) => a + (x.tutar || 0), 0), cols: [{ h: "Tarih", v: r => dt(r.tarih) }, { h: "Tarla", v: r => (D.coll("tarlalar").find(t => t.id === r.tarlaId) || {}).ad || "—" }, { h: "Açıklama", v: r => r.aciklama || "—" }, { h: "Tutar", v: r => D.money(r.tutar) }] }) },
-    "/gelir-kiralama": { title: "İşçi Kiralama Geliri", render: crud({ coll: "gelirler", title: "İşçi Kiralama Geliri", icon: "👷", addLabel: "Tahsilat Ekle", lead: "Müşterilerden alınan işçilik ödemeleri — detaylı borç takibi: İşçi Kiralama sayfası", totalLabel: "Tahsil Edilen", defaults: { tur: "isciKiralama" }, filter: g => g.tur === "isciKiralama", fields: () => [{ key: "tarih", label: "Tarih", type: "date", required: true }, { key: "musteri", label: "Müşteri", type: "text", datalist: D.musteriList(), placeholder: "Ad Soyad" }, { key: "tutar", label: "Alınan Tutar (₺)", type: "money", required: true }, { key: "aciklama", label: "Not", type: "text", full: true, placeholder: "nakit / havale" }], total: r => r.reduce((a, x) => a + (x.tutar || 0), 0), cols: [{ h: "Tarih", v: r => dt(r.tarih) }, { h: "Müşteri", v: r => r.musteri || "—" }, { h: "Açıklama", v: r => r.aciklama || "—" }, { h: "Tutar", v: r => D.money(r.tutar) }] }) },
-    "/gelir-kira": { title: "Ev Kira Geliri", render: crud({ coll: "gelirler", title: "Ev Kira Geliri", icon: "🏠", addLabel: "Kira Geliri Ekle", totalLabel: "Toplam", defaults: { tur: "evKira" }, filter: g => g.tur === "evKira", fields: gelirFields, total: r => r.reduce((a, x) => a + (x.tutar || 0), 0), cols: [{ h: "Tarih", v: r => dt(r.tarih) }, { h: "Açıklama", v: r => r.aciklama || "—" }, { h: "Tutar", v: r => D.money(r.tutar) }] }) },
+    "/gelir-hasat": { title: "Hasat Geliri", render: crud({ coll: "gelirler", title: "Hasat Geliri", icon: "🌾", addLabel: "Hasat Geliri Ekle", totalLabel: "Toplam Hasat Geliri", defaults: { tur: "hasat" }, filter: g => g.tur === "hasat", fields: gelirFields, total: r => r.reduce((a, x) => a + (x.tutar || 0), 0), cols: [{ h: "Tarih", v: r => dt(r.tarih) }, { h: "Tarla", v: r => (D.coll("tarlalar").find(t => t.id === r.tarlaId) || {}).ad || "—" }, { h: "Açıklama", v: r => r.aciklama || "—" }, { h: "Tutar", v: r => D.money(r.tutar) }, { h: "USD", v: r => Doviz.usdStr(r.tutar, r.tarih) }] }) },
+    "/gelir-kiralama": { title: "İşçi Kiralama Geliri", render: crud({ coll: "gelirler", title: "İşçi Kiralama Geliri", icon: "👷", addLabel: "Tahsilat Ekle", lead: "Müşterilerden alınan işçilik ödemeleri — detaylı borç takibi: İşçi Kiralama sayfası", totalLabel: "Tahsil Edilen", defaults: { tur: "isciKiralama" }, filter: g => g.tur === "isciKiralama", fields: () => [{ key: "tarih", label: "Tarih", type: "date", required: true }, { key: "musteri", label: "Müşteri", type: "text", datalist: D.musteriList(), placeholder: "Ad Soyad" }, { key: "tutar", label: "Alınan Tutar (₺)", type: "money", required: true }, { key: "aciklama", label: "Not", type: "text", full: true, placeholder: "nakit / havale" }], total: r => r.reduce((a, x) => a + (x.tutar || 0), 0), cols: [{ h: "Tarih", v: r => dt(r.tarih) }, { h: "Müşteri", v: r => r.musteri || "—" }, { h: "Açıklama", v: r => r.aciklama || "—" }, { h: "Tutar", v: r => D.money(r.tutar) }, { h: "USD", v: r => Doviz.usdStr(r.tutar, r.tarih) }] }) },
+    "/gelir-kira": { title: "Ev Kira Geliri", render: crud({ coll: "gelirler", title: "Ev Kira Geliri", icon: "🏠", addLabel: "Kira Geliri Ekle", totalLabel: "Toplam", defaults: { tur: "evKira" }, filter: g => g.tur === "evKira", fields: gelirFields, total: r => r.reduce((a, x) => a + (x.tutar || 0), 0), cols: [{ h: "Tarih", v: r => dt(r.tarih) }, { h: "Açıklama", v: r => r.aciklama || "—" }, { h: "Tutar", v: r => D.money(r.tutar) }, { h: "USD", v: r => Doviz.usdStr(r.tutar, r.tarih) }] }) },
 
     "/gider-genel": { title: "Genel Giderler", render: giderRoute("genel", "📋") },
     "/gider-makine": { title: "Makine Giderleri", render: giderRoute("makine", "⚙️") },
@@ -114,7 +116,7 @@
 
     "/tarlalar": { title: "Tarla Yönetimi", render: crud({ coll: "tarlalar", title: "Tarla Yönetimi", icon: "🗺️", addLabel: "Tarla Ekle", lead: "Tarlaya tıkla → gider/gelir dökümü · alan, çeşit, GPS, verim", onRowClick: tarlaDetay, sort: (a, b) => (b.verimPuani || 0) - (a.verimPuani || 0), fields: tarlaFields, cols: [{ h: "Tarla", v: r => r.ad }, { h: "Ürün", v: r => D.urun(r.urun).emoji + " " + D.urun(r.urun).ad }, { h: "Köy", v: r => r.koy || "—" }, { h: "Ada/Parsel", v: r => r.adaParsel || "—" }, { h: "Alan", v: r => (r.alanDekar || 0) + " dekar" }, { h: "Çeşit", v: r => r.cesit || "—" }, { h: "Dikim", v: r => r.dikimYili || "—" }, { h: "Verim", v: r => "%" + (r.verimPuani || 0) }], extraKpi: r => miniKpi("orange", "Toplam Dekar", D.num(r.reduce((a, x) => a + (x.alanDekar || 0), 0))), total: r => null }) },
 
-    "/hasat": { title: "Hasat Takip", render: crud({ coll: "hasatlar", title: "Hasat Takip", icon: "🌰", addLabel: "Hasat Kaydı Ekle", lead: "Tarla bazlı yaş/kuru ürün, randıman, nem", fields: hasatFields, compute: d => { const r = (d.yasUrun && d.kuruUrun) ? Math.round(d.kuruUrun / d.yasUrun * 100) : ""; return { randiman: r ? "Randıman: %" + r : "" }; }, computeSave: d => ({ randiman: (d.yasUrun && d.kuruUrun) ? Math.round(d.kuruUrun / d.yasUrun * 100) : d.randiman }), cols: [{ h: "Tarla", v: r => (D.coll("tarlalar").find(t => t.id === r.tarlaId) || {}).ad || "—" }, { h: "Tarih", v: r => dt(r.tarih) }, { h: "Yaş (kg)", v: r => D.num(r.yasUrun) }, { h: "Kuru (kg)", v: r => D.num(r.kuruUrun) }, { h: "Randıman", v: r => "%" + (r.randiman || 0) }, { h: "Nem", v: r => "%" + (r.nem || 0) }] }) },
+    "/hasat": { title: "Hasat Takip", render: crud({ coll: "hasatlar", title: "Hasat Takip", icon: "🌰", addLabel: "Hasat Kaydı Ekle", lead: "Tarla bazlı yaş/kuru ürün, randıman, nem", fields: hasatFields, compute: d => { const r = (d.yasUrun && d.kuruUrun) ? Math.round(d.kuruUrun / d.yasUrun * 100) : ""; return { randiman: r ? "Randıman: %" + r : "" }; }, computeSave: d => ({ randiman: (d.yasUrun && d.kuruUrun) ? Math.round(d.kuruUrun / d.yasUrun * 100) : d.randiman }), cols: [{ h: "Tarla", v: r => (D.coll("tarlalar").find(t => t.id === r.tarlaId) || {}).ad || "—" }, { h: "Tarih", v: r => dt(r.tarih) }, { h: "Çuval", v: r => D.num(r.cuval) || "—" }, { h: "Yaş (kg)", v: r => D.num(r.yasUrun) }, { h: "Kuru (kg)", v: r => D.num(r.kuruUrun) }, { h: "Randıman", v: r => "%" + (r.randiman || 0) }, { h: "Nem", v: r => "%" + (r.nem || 0) }] }) },
 
     "/isci-kiralama": { title: "İşçi Kiralama", render: v => Isci.render(v) },
     "/takvim": { title: "Kiralama Takvimi", render: v => Takvim.render(v) },
@@ -124,6 +126,7 @@
     "/puantaj": { title: "Puantaj", render: crud({ coll: "puantaj", title: "Puantaj", icon: "🕘", addLabel: "Puantaj Ekle", lead: "Günlük giriş/çıkış, mesai, hakediş", fields: () => [{ key: "isciAdi", label: "İşçi Adı", type: "text", required: true }, { key: "tarih", label: "Tarih", type: "date", required: true }, { key: "giris", label: "Giriş (00.00)", type: "text", placeholder: "08.00" }, { key: "cikis", label: "Çıkış (00.00)", type: "text", placeholder: "17.00" }, { key: "calismaSaat", label: "Çalışma Saati", type: "number", calc: true }, { key: "fazlaMesai", label: "Fazla Mesai (saat)", type: "number" }, { key: "odenen", label: "Ödenen (₺)", type: "money" }, { key: "kalan", label: "Kalan Alacak (₺)", type: "money" }], compute: d => { const s = saatFark(d.giris, d.cikis); return { calismaSaat: s != null ? "≈ " + s + " saat" : "" }; }, computeSave: d => { const s = saatFark(d.giris, d.cikis); return { calismaSaat: s != null ? s : d.calismaSaat }; }, cols: [{ h: "İşçi", v: r => r.isciAdi }, { h: "Tarih", v: r => dt(r.tarih) }, { h: "Giriş–Çıkış", v: r => (r.giris || "—") + " – " + (r.cikis || "—") }, { h: "Saat", v: r => r.calismaSaat || "—" }, { h: "Ödenen", v: r => D.money(r.odenen) }, { h: "Kalan", v: r => D.money(r.kalan) }] }) },
 
     "/raporlar": { title: "Raporlar", render: v => Reports.karRapor(v) },
+    "/doviz": { title: "USD Karşılığı", render: v => Doviz.render(v) },
     "/hava": { title: "Hava ve Karar Destek", render: v => Weather.render(v) },
     "/analiz": { title: "Analiz Merkezi", render: v => Reports.analizPage(v) },
     "/ai": { title: "Yapay Zeka Asistanı", render: v => Asistan.render(v) },
@@ -133,7 +136,7 @@
 
   function giderRoute(kategori, ico) {
     const titles = { genel: "Genel Giderler", makine: "Makine Giderleri", yakit: "Yakıt Giderleri", ekipman: "Ekipman Giderleri" };
-    return crud({ coll: "giderler", title: titles[kategori], icon: ico, addLabel: titles[kategori] + " Ekle", totalLabel: "Toplam", defaults: { kategori, altKategori: kategori === "genel" ? "iscilik" : kategori }, filter: g => g.kategori === kategori, fields: () => giderFields(kategori), total: r => r.reduce((a, x) => a + (x.tutar || 0), 0), cols: [{ h: "Tarih", v: r => dt(r.tarih) }, { h: "Tür", v: r => r.tur }, { h: "Tarla", v: r => (D.coll("tarlalar").find(t => t.id === r.tarlaId) || {}).ad || "— genel —" }, { h: "Açıklama", v: r => r.aciklama || "—" }, { h: "Tutar", v: r => D.money(r.tutar) }] });
+    return crud({ coll: "giderler", title: titles[kategori], icon: ico, addLabel: titles[kategori] + " Ekle", totalLabel: "Toplam", defaults: { kategori, altKategori: kategori === "genel" ? "iscilik" : kategori }, filter: g => g.kategori === kategori, fields: () => giderFields(kategori), total: r => r.reduce((a, x) => a + (x.tutar || 0), 0), cols: [{ h: "Tarih", v: r => dt(r.tarih) }, { h: "Tür", v: r => r.tur }, { h: "Tarla", v: r => (D.coll("tarlalar").find(t => t.id === r.tarlaId) || {}).ad || "— genel —" }, { h: "Açıklama", v: r => r.aciklama || "—" }, { h: "Tutar", v: r => D.money(r.tutar) }, { h: "USD", v: r => Doviz.usdStr(r.tutar, r.tarih) }] });
   }
 
   function saatFark(g, c) {
@@ -291,6 +294,7 @@
         </div>
       </div>
       <div class="panel" id="cloudPanel" style="margin-top:14px;max-width:540px"></div>
+      <div class="panel" id="cesitPanel" style="margin-top:14px;max-width:760px"></div>
       <div class="panel" style="margin-top:14px;max-width:540px"><h3>ℹ️ Hakkında</h3>
         <div class="about-row"><b>Uygulama</b><span>TİYS — Tarım İşletme Yönetim Sistemi</span></div>
         <div class="about-row"><b>Sürüm</b><span>1.0.0</span></div>
@@ -380,6 +384,44 @@
     }
     renderCloud();
 
+    function renderCesitler() {
+      const p = view.querySelector("#cesitPanel"); if (!p) return;
+      const esc = s => (s + "").replace(/[<>&"]/g, c => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c]));
+      const GELIR_DEF = ["Hasat", "İşçi Kiralama", "Ev Kira", "Diğer"];
+      const defFor = k => k === "giderTurleri" ? GENEL_TUR.slice() : GELIR_DEF.slice();
+      const d = D.load();
+      const gider = d.ayarlar.giderTurleri || GENEL_TUR.slice();
+      const gelir = d.ayarlar.gelirCesitleri || GELIR_DEF.slice();
+      const chip = (x, key, i) => `<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);padding:4px 10px;border-radius:14px;font-size:12.5px">${esc(x)} <button data-del="${key}" data-i="${i}" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:13px;padding:0;line-height:1">✕</button></span>`;
+      const liste = (arr, key) => arr.length ? arr.map((x, i) => chip(x, key, i)).join("") : '<span class="lead">— henüz yok —</span>';
+      const inpStyle = "flex:1;padding:8px 10px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.15);border-radius:8px;color:inherit";
+      p.innerHTML = `<h3>🏷️ Gelir / Gider Çeşitleri</h3>
+        <p class="lead" style="margin-top:0">Gelir ve gider formlarındaki açılır listelere kendi türlerini ekle/çıkar.</p>
+        <div class="grid cols-2" style="align-items:start;gap:18px">
+          <div>
+            <div style="font-weight:600;margin-bottom:8px">🧮 Gider Türleri <span class="lead">(Genel Giderler)</span></div>
+            <div style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:10px">${liste(gider, "giderTurleri")}</div>
+            <div style="display:flex;gap:7px"><input id="ce_gider" placeholder="Yeni gider türü…" style="${inpStyle}"><button class="btn ghost" data-add="giderTurleri">+ Ekle</button></div>
+          </div>
+          <div>
+            <div style="font-weight:600;margin-bottom:8px">💰 Gelir Çeşitleri</div>
+            <div style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:10px">${liste(gelir, "gelirCesitleri")}</div>
+            <div style="display:flex;gap:7px"><input id="ce_gelir" placeholder="Yeni gelir çeşidi…" style="${inpStyle}"><button class="btn ghost" data-add="gelirCesitleri">+ Ekle</button></div>
+          </div>
+        </div>`;
+      p.querySelectorAll("[data-del]").forEach(b => b.onclick = () => {
+        const k = b.getAttribute("data-del"), i = +b.getAttribute("data-i");
+        const dd = D.load(); dd.ayarlar[k] = dd.ayarlar[k] || defFor(k); dd.ayarlar[k].splice(i, 1); D.save(); renderCesitler();
+      });
+      p.querySelectorAll("[data-add]").forEach(b => b.onclick = () => {
+        const k = b.getAttribute("data-add");
+        const inp = view.querySelector(k === "giderTurleri" ? "#ce_gider" : "#ce_gelir");
+        const v = (inp.value || "").trim(); if (!v) return;
+        const dd = D.load(); dd.ayarlar[k] = dd.ayarlar[k] || defFor(k); if (dd.ayarlar[k].indexOf(v) < 0) dd.ayarlar[k].push(v); D.save(); renderCesitler();
+      });
+    }
+    renderCesitler();
+
     function val(s) { return view.querySelector(s).value; }
   }
 
@@ -393,6 +435,7 @@
     if (window.Reports && Reports.destroy) Reports.destroy();
     if (window.Weather && Weather.destroy) Weather.destroy();
     r.render(view);
+    if (window.Doviz && Doviz.prefetch) Doviz.prefetch(() => route());   // USD sütunu için kurları yükle, gelince yeniden çiz
     document.querySelectorAll("#nav a.item").forEach(a => {
       const on = a.getAttribute("href") === "#" + hash;
       a.classList.toggle("active", on);
