@@ -87,26 +87,25 @@
     const kur = kurBul(cache(), (tarih + "").slice(0, 10));
     return kur ? usdFmt(tutar / kur) : "—";
   }
-  // Gelir/gider tarihlerinin kurlarını arka planda BİR KEZ yükle; YENİ kur geldiyse 1 kez yeniden çiz.
-  // ⚠️ DÖNGÜ KORUMASI: route() her çizimde prefetch çağırır. Eğer prefetch yeniden route()
-  // tetikleyebilseydi ve çıkış koşulu hatalı olsaydı (hafta sonu/tatil/offline kuru ASLA
-  // cache'lenmez) sonsuz döngü olurdu → sayfa sürekli yanıp söner, butonlar/formlar çalışmaz.
-  // İki kalıcı bayrak bunu MATEMATİKSEL olarak imkânsız kılar:
-  var baslatildi = false;   // kur yükleme (fetch) ömür boyu yalnızca 1 kez tetiklenir
-  var cizildi = false;      // cb (route) ömür boyu EN FAZLA 1 kez çağrılır → rekürsiyon imkânsız
+  // Gelir/gider tarihlerinin kurlarını arka planda yükle; YENİ kur geldiyse 1 kez yeniden çiz.
+  // ⚠️ DÖNGÜ KORUMASI: route() her çizimde prefetch çağırır; prefetch de (yeni kur gelince)
+  // route()'u geri çağırır. Çıkış koşulu KESİN sonlanmazsa sonsuz döngü olur → sayfa sürekli
+  // yanıp söner, butonlar/formlar çalışmaz (her ekran genişliğinde). Çözüm: her tarih ÖMÜR BOYU
+  // EN FAZLA 1 KEZ denenir (denenen{}). Hafta sonu/tatil/offline kuru hiç cache'lenmese bile o
+  // tarih "denenen" olduğu için bir daha listeye girmez → eksik er ya da geç boşalır → döngü biter.
+  // (baslatildi gibi tek-sefer bayrağı KULLANMA: import/bulut sonrası yeni tarihler için USD çekmez.)
+  var denenen = {};
   function prefetch(cb) {
-    if (baslatildi) return;                              // zaten denendi → ÇIK (fetch tekrarı yok)
     const d = DB.load();
     const hepsi = [].concat(d.gelirler || [], d.giderler || []).filter(x => x.tarih && x.tutar);
-    if (!hepsi.length) return;                           // veri yok → bayrağı yakma, veri gelince dene
-    baslatildi = true;                                   // bu noktadan sonra prefetch bir daha fetch etmez
     const dates = Array.from(new Set(hepsi.map(x => (x.tarih + "").slice(0, 10))));
-    const eksik = dates.filter(dt => !cache()[dt]);
-    if (!eksik.length) return;
+    const eksik = dates.filter(dt => !cache()[dt] && !denenen[dt]);
+    if (!eksik.length) return;                          // denenmemiş yeni tarih yok → ÇIK (döngü imkânsız)
+    eksik.forEach(dt => denenen[dt] = true);             // her tarih en fazla 1 kez denenir
     const oncekiBoyut = Object.keys(cache()).length;
     kurlariYukle(eksik).then(function () {
-      // Yalnızca yeni kur eklendiyse VE daha önce çizilmediyse 1 kez yeniden çiz
-      if (cb && !cizildi && Object.keys(cache()).length > oncekiBoyut) { cizildi = true; cb(); }
+      // SADECE gerçekten yeni kur eklendiyse 1 kez yeniden çiz (offline/engelli → çizim yok, kesinti yok)
+      if (cb && Object.keys(cache()).length > oncekiBoyut) cb();
     });
   }
 
