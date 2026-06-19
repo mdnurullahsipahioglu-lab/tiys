@@ -361,25 +361,35 @@
         p.innerHTML = `<h3>☁️ Bulut Senkron</h3><p class="lead" style="margin-top:0">Henüz kurulmadı. Kurulduğunda telefon · bilgisayar · web otomatik eşitlenir, USB ile taşımaya gerek kalmaz.</p>`;
         return;
       }
-      if (!s.loggedIn) {
-        p.innerHTML = `<h3>☁️ Bulut Senkron</h3>
-          <p class="lead" style="margin-top:0">Giriş yap; verilerin tüm cihazlarında otomatik eşitlensin.</p>
-          <div class="form-grid"><div class="field"><label>E-posta</label><input id="cl_mail" type="email" placeholder="ornek@mail.com"></div>
-          <div class="field"><label>Şifre</label><input id="cl_pass" type="password" placeholder="en az 6 karakter"></div></div>
-          <div style="display:flex;gap:10px;margin-top:12px"><button class="btn primary" id="cl_in">Giriş Yap</button><button class="btn ghost" id="cl_up">Kayıt Ol</button></div>
+      if (!s.paired) {
+        p.innerHTML = `<h3>☁️ Bulut Senkron — Eşleştirme Kodu</h3>
+          <p class="lead" style="margin-top:0">Hesap/şifre yok. <b>Bir cihazda</b> "Yeni eşleştirme" ile kod üret; <b>diğer cihazlarda</b> o kodu gir. Hepsi otomatik eşitlenir.</p>
+          <div style="margin-bottom:14px"><button class="btn primary" id="cl_new">✨ Yeni eşleştirme oluştur</button></div>
+          <div class="field" style="max-width:320px"><label>Ya da var olan kodu gir</label><input id="cl_code" placeholder="ABCD-EFGH" autocapitalize="characters" style="text-transform:uppercase;letter-spacing:3px;font-size:18px;font-family:monospace"></div>
+          <div style="margin-top:10px"><button class="btn ghost" id="cl_join">🔗 Bu koda bağlan</button></div>
           <div class="lead" id="cl_msg" style="margin-top:10px"></div>`;
-        const mail = () => p.querySelector("#cl_mail").value.trim(), pass = () => p.querySelector("#cl_pass").value, msg = t => p.querySelector("#cl_msg").textContent = t;
-        p.querySelector("#cl_in").onclick = async () => { msg("Giriş yapılıyor…"); const r = await Cloud.signIn(mail(), pass()); if (r.error) msg("⚠️ " + r.error); else { Forms.toast("Giriş yapıldı ✓"); renderCloud(); } };
-        p.querySelector("#cl_up").onclick = async () => { msg("Kayıt olunuyor…"); const r = await Cloud.signUp(mail(), pass()); if (r.error) msg("⚠️ " + r.error); else { msg("✓ " + (r.mesaj || "Kayıt oldu")); renderCloud(); } };
+        const msg = t => p.querySelector("#cl_msg").textContent = t;
+        p.querySelector("#cl_new").onclick = async () => { msg("Kod oluşturuluyor…"); const r = await Cloud.kodOlustur(); if (r.error) msg("⚠️ " + r.error); else { Forms.toast("Eşleştirme oluştu ✓"); renderCloud(); } };
+        p.querySelector("#cl_join").onclick = async () => {
+          const girilen = p.querySelector("#cl_code").value;
+          if (Cloud.kayitSayisi && Cloud.kayitSayisi() > 0 && !confirm("Bu cihazdaki mevcut veri, koddaki ortak veriyle DEĞİŞTİRİLECEK. Devam edilsin mi?")) return;
+          msg("Bağlanılıyor…"); const r = await Cloud.kodGir(girilen);
+          if (r.error) msg("⚠️ " + r.error); else { Forms.toast(r.vardiVeri ? "Bağlandı, veri çekildi ✓" : "Bağlandı ✓"); renderCloud(); }
+        };
       } else {
-        p.innerHTML = `<h3>☁️ Bulut Senkron</h3>
-          <div class="about-row"><b>Hesap</b><span>${s.email} ✓</span></div>
+        p.innerHTML = `<h3>☁️ Bulut Senkron — Açık</h3>
+          <p class="lead" style="margin-top:0">Bu kodu <b>diğer cihazlara gir</b>, hepsi eşitlensin:</p>
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:8px 0 14px">
+            <span style="font-size:26px;font-weight:800;letter-spacing:3px;font-family:monospace;color:#166534;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:8px 16px">${s.kod}</span>
+            <button class="btn ghost" id="cl_copy">📋 Kopyala</button></div>
+          <div class="about-row"><b>Durum</b><span>${s.durum === "senkron" ? "🔄 Senkronize ediliyor…" : s.durum === "cevrimdisi" ? "☁️ Çevrimdışı" : "✅ Açık"}</span></div>
           <div class="about-row"><b>Son eşitleme</b><span>${s.lastSync ? D.dateTimeTR(s.lastSync) : "—"}</span></div>
-          <p class="lead">Veriler değiştikçe otomatik buluta yüklenir; yeni cihazda giriş yapınca otomatik iner.</p>
-          <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn ghost" id="cl_push">⬆️ Şimdi Yükle</button><button class="btn ghost" id="cl_pull">⬇️ Buluttan Çek</button><button class="btn danger" id="cl_out">Çıkış</button></div>`;
+          <p class="lead">Veri girince ~1.5 sn'de buluta gider; diğer cihaza geçince anında iner.</p>
+          <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn ghost" id="cl_push">⬆️ Şimdi Yükle</button><button class="btn ghost" id="cl_pull">⬇️ Şimdi Çek</button><button class="btn danger" id="cl_unpair">Bağlantıyı kes</button></div>`;
+        p.querySelector("#cl_copy").onclick = () => { try { navigator.clipboard.writeText(s.kod); Forms.toast("Kod kopyalandı ✓"); } catch (e) { Forms.toast(s.kod); } };
         p.querySelector("#cl_push").onclick = async () => { const r = await Cloud.push(); Forms.toast(r.error ? "⚠️ " + r.error : "Buluta yüklendi ✓"); renderCloud(); };
-        p.querySelector("#cl_pull").onclick = async () => { if (!confirm("Buluttaki veri bu cihazdakini değiştirecek. Devam?")) return; const r = await Cloud.pull(); Forms.toast(r.error ? "⚠️ " + r.error : (r.vardi ? "Buluttan çekildi ✓" : "Bulutta kayıt yok")); };
-        p.querySelector("#cl_out").onclick = async () => { await Cloud.signOut(); Forms.toast("Çıkış yapıldı"); renderCloud(); };
+        p.querySelector("#cl_pull").onclick = async () => { const r = await Cloud.pull(); Forms.toast(r.error ? "⚠️ " + r.error : (r.vardi ? "Buluttan çekildi ✓" : "Bulutta yeni veri yok")); };
+        p.querySelector("#cl_unpair").onclick = () => { if (!confirm("Bu cihazın eşleştirmesi kaldırılsın mı? (Veri cihazda kalır)")) return; Cloud.kopar(); Forms.toast("Bağlantı kesildi"); renderCloud(); };
       }
     }
     renderCloud();
@@ -455,7 +465,7 @@
   function cikisYap() {
     closeSidebar();
     if (!confirm("TİYS'ten çıkmak istiyor musunuz? (Verileriniz bu cihazda saklı kalır)")) return;
-    try { if (typeof Cloud !== "undefined" && Cloud.status && Cloud.status().loggedIn) Cloud.signOut(); } catch (e) {}
+    try { if (typeof Cloud !== "undefined" && Cloud.status && Cloud.status().paired) Cloud.push(); } catch (e) {}
     try { window.close(); } catch (e) {}
     setTimeout(function () {
       if (!document.hidden) {
@@ -471,7 +481,7 @@
     if (!s || !s.configured) { el.style.display = "none"; return; }
     el.style.display = ""; el.style.cursor = "pointer";
     el.onclick = function () { location.hash = "#/ayarlar"; };
-    if (!s.loggedIn) { el.innerHTML = "☁️ <span>Senkron kapalı · giriş yap</span>"; el.style.color = "#94a3b8"; return; }
+    if (!s.paired) { el.innerHTML = "☁️ <span>Senkron kapalı · eşleştir</span>"; el.style.color = "#94a3b8"; return; }
     if (s.durum === "senkron") { el.innerHTML = "🔄 <span>Senkronize ediliyor…</span>"; el.style.color = "#2563eb"; return; }
     if (s.durum === "cevrimdisi") { el.innerHTML = "☁️ <span>Çevrimdışı — bağlanınca eşitlenir</span>"; el.style.color = "#d97706"; return; }
     el.innerHTML = "✅ <span>Senkron açık</span>"; el.style.color = "#16a34a";
