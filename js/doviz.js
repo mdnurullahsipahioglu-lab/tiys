@@ -87,14 +87,25 @@
     const kur = kurBul(cache(), (tarih + "").slice(0, 10));
     return kur ? usdFmt(tutar / kur) : "—";
   }
-  // Tüm gelir/gider tarihlerinin kurlarını arka planda yükle; bittiğinde cb (yeniden çiz).
+  // Tüm gelir/gider tarihlerinin kurlarını arka planda yükle; YENİ kur geldiyse cb (yeniden çiz).
+  var denenen = {};   // bir kez denenen tarihler (başarılı/başarısız) — SONSUZ DÖNGÜYÜ önler
   function prefetch(cb) {
     const d = DB.load();
     const hepsi = [].concat(d.gelirler || [], d.giderler || []).filter(x => x.tarih && x.tutar);
     const dates = Array.from(new Set(hepsi.map(x => (x.tarih + "").slice(0, 10))));
     const c = cache();
-    if (!dates.length || dates.every(dt => c[dt])) return;   // hepsi önbellekte → çık
-    kurlariYukle(dates).then(() => { if (cb) cb(); });
+    // Cache'te OLMAYAN ve henüz DENENMEMİŞ tarihler. Hafta sonu/tatil tarihleri ve
+    // internet yok/engelli (frankfurter TR'de bloklu olabilir) durumunda kur ASLA
+    // cache'lenmez; "denenen" işareti olmadan dates.every(c[dt]) hiç true olmaz ve
+    // route→prefetch→route SONSUZ DÖNER (sayfa sürekli yeniden çizilir, scroll/form bozulur).
+    const eksik = dates.filter(dt => !c[dt] && !denenen[dt]);
+    if (!eksik.length) return;                          // denenmemiş yeni tarih yok → ÇIK (döngü imkânsız)
+    eksik.forEach(dt => denenen[dt] = true);             // her tarih en fazla 1 kez denenir
+    const oncekiBoyut = Object.keys(c).length;
+    kurlariYukle(eksik).then(function () {
+      // SADECE gerçekten yeni kur eklendiyse yeniden çiz (offline/engelli → çizim yok, kesinti yok)
+      if (cb && Object.keys(cache()).length > oncekiBoyut) cb();
+    });
   }
 
   global.Doviz = { render, usdStr, prefetch };
