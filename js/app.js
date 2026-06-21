@@ -283,9 +283,14 @@
             <button class="btn ghost" id="b_xls">📊 Tüm Verileri Excel'e Aktar</button>
             <button class="btn ghost" id="b_xls_imp">📥 Excel'den İçe Aktar (yedek/düzenleme)</button>
             <input type="file" id="b_xls_file" accept=".xlsx,.xls" class="hidden">
-            <button class="btn ghost" id="b_export">⬇️ Yedek Al (JSON indir)</button>
-            <button class="btn ghost" id="b_import">⬆️ Yedek Yükle (JSON)</button>
+            <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:12px;margin-bottom:4px">
+              <div style="font-weight:700;margin-bottom:3px">📲 Cihaz Arası Aktar — kurulumsuz</div>
+              <div class="lead" style="font-size:12.5px;margin:0 0 10px">Bir cihazda <b>Paylaş</b> → WhatsApp/e-posta ile diğerine yolla → orada <b>Gelen Veriyi Yükle</b>. Hesap/kod gerekmez.</div>
+              <button class="btn primary" id="b_share" style="width:100%">📤 Veriyi Paylaş (WhatsApp · e-posta)</button>
+            </div>
+            <button class="btn ghost" id="b_import">📥 Gelen Veriyi Yükle</button>
             <input type="file" id="b_file" accept="application/json" class="hidden">
+            <button class="btn ghost" id="b_export">⬇️ Yedek Al (JSON indir)</button>
             <button class="btn danger" id="b_reset">♻️ Demo verilere sıfırla</button>
           </div>
           <p class="lead" style="margin-top:14px">🔒 Tüm veri yalnızca bu cihazda saklanır.${(window.tiysFS && window.tiysFS.yol) ? ' <b>Masaüstü:</b> verileriniz <code style="font-size:11px">' + String(window.tiysFS.yol()).replace(/</g, "&lt;") + '</code> dosyasında kalıcı tutulur — programı güncellemek/yeniden kurmak verilerinizi SİLMEZ.' : ''}</p>
@@ -365,6 +370,22 @@
         apply.forEach(a => { a[2].forEach(o => { if (!o.id) o.id = "imp_" + Math.random().toString(36).slice(2, 9); }); d[a[0]] = a[2]; });
         D.save(); Forms.toast(apply.length + " tablo içe aktarıldı ✓"); FIYS.route();
       });
+    };
+    view.querySelector("#b_share").onclick = async () => {
+      const ad = "tiys-yedek-" + new Date().toISOString().slice(0, 10) + ".json";
+      const veri = D.exportJSON();
+      try {
+        const dosya = new File([veri], ad, { type: "application/json" });
+        if (navigator.canShare && navigator.canShare({ files: [dosya] })) {
+          await navigator.share({ files: [dosya], title: "TİYS verisi", text: "TİYS verisi. Diğer cihazda: Ayarlar → 📥 Gelen Veriyi Yükle ile aç." });
+          return;
+        }
+      } catch (e) { if (e && e.name === "AbortError") return; }
+      // Paylaşım yoksa (masaüstü vb.): dosyayı indir, kullanıcı elle göndersin
+      const blob = new Blob([veri], { type: "application/json" });
+      const url = URL.createObjectURL(blob), aEl = document.createElement("a");
+      aEl.href = url; aEl.download = ad; aEl.click(); URL.revokeObjectURL(url);
+      Forms.toast("Dosya indirildi — WhatsApp/e-posta ile diğer cihaza gönder 📤");
     };
     view.querySelector("#b_export").onclick = () => {
       const blob = new Blob([D.exportJSON()], { type: "application/json" });
