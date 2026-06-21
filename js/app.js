@@ -264,20 +264,18 @@
     view.innerHTML = `
       <div class="page-head"><div><h2 style="margin:0">Ayarlar</h2><div class="lead">İşletme bilgileri, sabit fiyatlar, yedekleme</div></div></div>
       <div class="grid cols-2" style="align-items:start">
-        <div class="panel"><h3>🏭 İşletme & Sabit Fiyatlar</h3>
+        <div class="panel"><h3>🏭 İşletme Bilgileri</h3>
           <div class="form-grid">
             <div class="field full"><label>İşletme Adı</label><input id="s_isl" value="${a.isletmeAdi || ""}"></div>
             <div class="field"><label>Yönetici</label><input id="s_yon" value="${a.yonetici || ""}"></div>
             <div class="field"><label>Tahmini Hasat Tarihi</label><input id="s_has" type="date" value="${(a.hasatTarihi || "").slice(0, 10)}"></div>
-            <div class="field"><label>Gübre Fiyatı (₺/çuval)</label><input id="s_gub" type="number" value="${a.gubreFiyat || 0}"></div>
-            <div class="field"><label>İşçilik (₺/gün)</label><input id="s_isc" type="number" value="${a.iscilikFiyat || 0}"></div>
-            <div class="field"><label>Mazot (₺/lt)</label><input id="s_maz" type="number" value="${a.mazotFiyat || 0}"></div>
           </div>
-          <div class="lead" style="margin:14px 0 8px;font-weight:600">🌱 Ürün Satış Fiyatları (₺/kg)</div>
-          <div class="form-grid">
-            ${Object.keys(D.URUNLER).filter(k => k !== "diger").map(k => `<div class="field"><label>${D.URUNLER[k].emoji} ${D.URUNLER[k].ad}</label><input id="s_fiyat_${k}" type="number" value="${(a.urunFiyat && a.urunFiyat[k] != null) ? a.urunFiyat[k] : D.URUNLER[k].defaultFiyat}"></div>`).join("")}
-          </div>
-          <div style="margin-top:14px"><button class="btn primary" id="s_save">💾 Kaydet</button></div>
+          <div style="margin:12px 0"><button class="btn primary" id="s_save">💾 İşletme Bilgilerini Kaydet</button></div>
+          <hr style="border:0;border-top:1px solid var(--line,#e2e8f0);margin:16px 0">
+          <h3 style="margin-top:0">💰 Sabit Fiyatlar — Yıl Bazında</h3>
+          <p class="lead" style="margin-top:0">Gübre, işçilik, ürün fiyatı yıldan yıla değişir → <b>her yıl ayrı girilir</b>. Dashboard ve raporlar seçilen yılın fiyatını kullanır.</p>
+          <div class="field" style="max-width:240px"><label>📅 Fiyat Yılı</label><select id="fy_yil"></select></div>
+          <div id="fyBody" style="margin-top:10px"></div>
         </div>
         <div class="panel"><h3>☁️ Yedekleme & Veri</h3>
           <p class="lead" style="margin-top:0">Bulut senkronu eklenene kadar verini JSON dosyası olarak yedekleyip başka cihaza taşıyabilirsin.</p>
@@ -304,14 +302,42 @@
       </div>`;
     view.querySelector("#s_save").onclick = () => {
       const d = D.load();
-      d.ayarlar = Object.assign({}, a, {
-        isletmeAdi: val("#s_isl"), yonetici: val("#s_yon"), hasatTarihi: val("#s_has"),
-        gubreFiyat: +val("#s_gub"), iscilikFiyat: +val("#s_isc"), mazotFiyat: +val("#s_maz"),
-        urunFiyat: (function () { const uf = {}; Object.keys(D.URUNLER).filter(k => k !== "diger").forEach(k => uf[k] = +val("#s_fiyat_" + k)); return uf; })()
-      });
-      D.save(); Forms.toast("Ayarlar kaydedildi ✓");
+      d.ayarlar.isletmeAdi = val("#s_isl"); d.ayarlar.yonetici = val("#s_yon"); d.ayarlar.hasatTarihi = val("#s_has");
+      D.save(); Forms.toast("İşletme bilgileri kaydedildi ✓");
       document.getElementById("userName").textContent = d.ayarlar.yonetici || "Yönetici";
     };
+    // --- Yıl bazında sabit fiyatlar ---
+    const URUN_KEYS = Object.keys(D.URUNLER).filter(k => k !== "diger");
+    function fiyatYillariDoldur() {
+      const sel = view.querySelector("#fy_yil"); if (!sel) return;
+      const simdi = new Date().getFullYear(), set = new Set(D.yillar()); set.add(simdi); set.add(simdi + 1);
+      sel.innerHTML = [...set].sort((x, y) => y - x).map(y => `<option value="${y}">${y}</option>`).join("") + `<option value="__yeni">➕ Başka yıl…</option>`;
+      sel.value = String(simdi);
+    }
+    function fiyatYilRender(yil) {
+      const b = view.querySelector("#fyBody"); if (!b) return;
+      b.innerHTML = `<div class="form-grid">
+        <div class="field"><label>Gübre (₺/çuval)</label><input id="fy_gub" type="number" value="${D.sabitFiyat("gubreFiyat", yil)}"></div>
+        <div class="field"><label>İşçilik / Yevmiye (₺/gün)</label><input id="fy_isc" type="number" value="${D.yevmiyeFor(yil)}"></div>
+        <div class="field"><label>Mazot (₺/lt)</label><input id="fy_maz" type="number" value="${D.sabitFiyat("mazotFiyat", yil)}"></div></div>
+        <div class="lead" style="margin:12px 0 8px;font-weight:600">🌱 Ürün Satış Fiyatları (₺/kg) — ${yil}</div>
+        <div class="form-grid">${URUN_KEYS.map(k => `<div class="field"><label>${D.URUNLER[k].emoji} ${D.URUNLER[k].ad}</label><input id="fy_u_${k}" type="number" value="${D.urunFiyat(k, yil)}"></div>`).join("")}</div>
+        <div style="margin-top:14px"><button class="btn primary" id="fy_save">💾 ${yil} Fiyatlarını Kaydet</button></div>`;
+      b.querySelector("#fy_save").onclick = () => {
+        D.setSabitFiyat("gubreFiyat", yil, +val("#fy_gub")); D.setYevmiye(yil, +val("#fy_isc")); D.setSabitFiyat("mazotFiyat", yil, +val("#fy_maz"));
+        URUN_KEYS.forEach(k => D.setUrunFiyat(k, yil, +val("#fy_u_" + k)));
+        Forms.toast(yil + " fiyatları kaydedildi ✓");
+      };
+    }
+    fiyatYillariDoldur();
+    const fySel = view.querySelector("#fy_yil");
+    if (fySel) {
+      fiyatYilRender(+fySel.value);
+      fySel.onchange = () => {
+        if (fySel.value === "__yeni") { const y = parseInt(prompt("Hangi yıl? (ör. 2024)"), 10); if (y > 1990 && y < 2100) { const o = document.createElement("option"); o.value = y; o.textContent = y; fySel.insertBefore(o, fySel.firstChild); fySel.value = String(y); fiyatYilRender(y); } else fiyatYillariDoldur(); return; }
+        fiyatYilRender(+fySel.value);
+      };
+    }
     const XLS_KOLL = [["tarlalar", "Tarlalar"], ["gelirler", "Gelirler"], ["giderler", "Giderler"], ["hasatlar", "Hasatlar"], ["isTakip", "İş Takibi"], ["puantaj", "Puantaj"], ["isciKiralamalar", "İşçi Kiralamalar"]];
     view.querySelector("#b_xls").onclick = () => {
       const d = D.load();

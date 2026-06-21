@@ -2,6 +2,7 @@
 (function (global) {
   "use strict";
   const YIL = 2026;
+  let seciliYil = new Date().getFullYear();   // null = Tüm Yıllar
   let _charts = [], _map = null;
 
   const PALETTE = {
@@ -27,10 +28,13 @@
 
   function render(view) {
     destroy();
-    const gelir = DB.toplamGelir(YIL), gider = DB.toplamGider(YIL), net = gelir - gider;
+    const gelir = DB.toplamGelir(seciliYil), gider = DB.toplamGider(seciliYil), net = gelir - gider;
+    const oncekiGelir = seciliYil ? DB.toplamGelir(seciliYil - 1) : 0, oncekiGider = seciliYil ? DB.toplamGider(seciliYil - 1) : 0;
+    const yoy = (s, o) => (!seciliYil || !o) ? "" : (function (p) { return (p >= 0 ? "▲ +" : "▼ ") + p + "%"; })(Math.round((s - o) / o * 100));
+    const yilEt = seciliYil ? seciliYil + " yılı" : "Tüm Yıllar";
     const tarlalar = DB.coll("tarlalar"), dekar = DB.toplamDekar();
     const isci = DB.load().aktifIsci || 0;
-    const giderD = DB.giderDagilimi(YIL), gelirD = DB.gelirDagilimi(YIL);
+    const giderD = DB.giderDagilimi(seciliYil), gelirD = DB.gelirDagilimi(seciliYil);
     const sira = DB.tarlaVerimSirasi();
     const isler = DB.coll("isler").slice().sort((a, b) => new Date(a.tarih) - new Date(b.tarih)).slice(0, 5);
     const kiralar = DB.coll("isciKiralamalar").slice().sort((a, b) => new Date(b.tarih) - new Date(a.tarih)).slice(0, 5);
@@ -44,11 +48,20 @@
     const gunKaldi = Math.max(0, Math.ceil((hasatT - new Date(2026, 5, 13)) / 86400000));
 
     view.innerHTML = `
+    <!-- Yıl seçici -->
+    <div class="panel" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px;padding:12px 16px">
+      <span style="font-weight:700">📅 Yıl:</span>
+      <select id="dashYil" style="padding:7px 12px;border-radius:8px;border:1px solid var(--line,#e2e8f0);font-size:15px;font-weight:600;background:#fff">
+        <option value="" ${seciliYil ? "" : "selected"}>Tüm Yıllar</option>
+        ${DB.yillar().map(y => `<option value="${y}" ${y === seciliYil ? "selected" : ""}>${y}</option>`).join("")}
+      </select>
+      <span class="lead" style="font-size:13px">${seciliYil ? seciliYil + " yılına ait rakamlar, grafikler ve dağılımlar" : "tüm yılların toplamı"}</span>
+    </div>
     <!-- KPI -->
     <div class="kpis">
-      ${kpi("green", "💰", "Toplam Gelir", DB.money(gelir), "Bu Yıl", "▲ %18.5")}
-      ${kpi("red", "🧮", "Toplam Gider", DB.money(gider), "Bu Yıl", "▲ %12.3")}
-      ${kpi("blue", "📈", "Net Kâr", DB.money(net), "Bu Yıl", "▲ %29.4")}
+      ${kpi("green", "💰", "Toplam Gelir", DB.money(gelir), yilEt, yoy(gelir, oncekiGelir))}
+      ${kpi("red", "🧮", "Toplam Gider", DB.money(gider), yilEt, yoy(gider, oncekiGider))}
+      ${kpi("blue", "📈", "Net Kâr", DB.money(net), yilEt, yoy(net, oncekiGelir - oncekiGider))}
       ${kpi("orange", "🏞️", "Toplam Tarla", tarlalar.length, "Toplam", "")}
       ${kpi("purple", "🌿", "Toplam Dekar", DB.num(dekar), "Dekar", "")}
       ${kpi("teal", "👷", "Aktif İşçi", isci, "Kişi", "")}
@@ -156,6 +169,7 @@
     initMap(tarlalar);
     bindAI();
     const ap = view.querySelector("#alacakPanel"); if (ap) ap.onclick = () => { location.hash = "#/isci-kiralama"; };
+    const dy = view.querySelector("#dashYil"); if (dy) dy.onchange = () => { seciliYil = dy.value ? +dy.value : null; render(view); };
   }
 
   function kpi(cls, ico, label, val, foot, trend) {
@@ -171,7 +185,7 @@
   }
 
   function initCharts(giderD, gToplam, gelirD, gelToplam) {
-    const trend = DB.aylikTrend(YIL);
+    const trend = DB.aylikTrend(seciliYil);
     _charts.push(new Chart(document.getElementById("trendChart"), {
       type: "line",
       data: {

@@ -38,7 +38,24 @@
     diger:     { ad: "Diğer", emoji: "🌱", cesitler: ["Diğer"], birim: "kg", defaultFiyat: 0, hasatAy: 9 }
   };
   function urun(key) { return URUNLER[key] || URUNLER.findik; }
-  function urunFiyat(key) { const a = (_data && _data.ayarlar) || {}; return (a.urunFiyat && a.urunFiyat[key] != null) ? a.urunFiyat[key] : urun(key).defaultFiyat; }
+  // Yıl-bazlı değer: v tek sayı (eski format → her yıla aynı) ya da {yil:deger}. En yakın (tercihen ≤yil) değeri döndür.
+  function yilDeger(v, yil) {
+    if (v == null) return null;
+    if (typeof v !== "object") return v;
+    const ks = Object.keys(v).map(Number).filter(n => !isNaN(n)).sort((a, b) => a - b);
+    if (!ks.length) return null;
+    const alt = ks.filter(k => k <= yil);
+    return v[String(alt.length ? alt[alt.length - 1] : ks[0])];
+  }
+  function urunFiyat(key, yil) { const a = (_data && _data.ayarlar) || {}; const v = yilDeger(a.urunFiyat ? a.urunFiyat[key] : null, yil || new Date().getFullYear()); return v != null ? v : urun(key).defaultFiyat; }
+  // Tek-değeri (eski format) objeye çevirirken eski değeri EN ESKİ veri yılına baz olarak taşı (geçmiş korunur)
+  function objeYap(c) { if (typeof c === "object" && c != null) return c; const o = {}; if (typeof c === "number") { const y = yillar(); o[String(y[y.length - 1])] = c; } return o; }
+  function setUrunFiyat(key, yil, val) { const a = load().ayarlar; a.urunFiyat = a.urunFiyat || {}; const c = objeYap(a.urunFiyat[key]); c[String(yil)] = Number(val) || 0; a.urunFiyat[key] = c; save(); }
+  // Sabit fiyat (gubreFiyat/mazotFiyat...) — yıla göre oku/yaz
+  function sabitFiyat(alan, yil) { return yilDeger((load().ayarlar || {})[alan], yil || new Date().getFullYear()) || 0; }
+  function setSabitFiyat(alan, yil, val) { const a = load().ayarlar; const c = objeYap(a[alan]); c[String(yil)] = Number(val) || 0; a[alan] = c; save(); }
+  // Veride geçen yıllar (büyükten küçüğe)
+  function yillar() { const s = new Set(); ["gelirler", "giderler", "hasatlar", "isciKiralamalar", "isTakip"].forEach(c => coll(c).forEach(x => { const y = x.tarih ? new Date(x.tarih).getFullYear() : 0; if (y > 1990 && y < 2100) s.add(y); })); if (!s.size) s.add(new Date().getFullYear()); return [...s].sort((a, b) => b - a); }
   function aktifUrunler() { const s = new Set(coll("tarlalar").map(t => t.urun || "findik")); return [...s]; }
   function urunOptions() { return Object.keys(URUNLER).map(k => ({ v: k, l: URUNLER[k].emoji + " " + URUNLER[k].ad })); }
 
@@ -147,8 +164,8 @@
   // Aylık gelir/gider (trend grafiği)
   function aylikTrend(yil) {
     const ay = Array.from({ length: 12 }, () => ({ gelir: 0, gider: 0 }));
-    coll("gelirler").forEach(g => { const d = new Date(g.tarih); if (yearOf(d) === yil) ay[d.getMonth()].gelir += Number(g.tutar) || 0; });
-    coll("giderler").forEach(g => { const d = new Date(g.tarih); if (yearOf(d) === yil) ay[d.getMonth()].gider += Number(g.tutar) || 0; });
+    coll("gelirler").forEach(g => { const d = new Date(g.tarih); if (!yil || yearOf(d) === yil) ay[d.getMonth()].gelir += Number(g.tutar) || 0; });
+    coll("giderler").forEach(g => { const d = new Date(g.tarih); if (!yil || yearOf(d) === yil) ay[d.getMonth()].gider += Number(g.tutar) || 0; });
     return ay;
   }
   function tarlaVerimSirasi() {
@@ -257,8 +274,8 @@
 
   // ---- İşçi kiralama / müşteri borç hanesi ---------------------------------
   function yevmiyeFor(yil) {
-    const a = load().ayarlar, y = a.yevmiyeler || {};
-    return y[String(yil)] != null ? y[String(yil)] : (a.iscilikFiyat || 0);
+    const v = yilDeger(load().ayarlar.yevmiyeler, yil);
+    return v != null ? v : sabitFiyat("iscilikFiyat", yil);
   }
   function setYevmiye(yil, val) {
     const d = load(); d.ayarlar.yevmiyeler = d.ayarlar.yevmiyeler || {};
@@ -291,7 +308,7 @@
     toplamGelir, toplamGider, netKar, toplamDekar,
     giderDagilimi, gelirDagilimi, aylikTrend, tarlaVerimSirasi,
     exportJSON, importJSON,
-    URUNLER, urun, urunFiyat, aktifUrunler, urunOptions,
+    URUNLER, urun, urunFiyat, setUrunFiyat, sabitFiyat, setSabitFiyat, yilDeger, yillar, aktifUrunler, urunOptions,
     yevmiyeFor, setYevmiye, tahsilatlar, musteriList, musteriOzet
   };
 })(window);

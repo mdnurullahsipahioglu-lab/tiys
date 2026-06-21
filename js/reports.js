@@ -12,7 +12,7 @@
     const totalGider = DB.toplamGider(YIL), totalDekar = DB.toplamDekar() || 1;
     return tarlalar.map(t => {
       const uretim = (t.sonVerimKgDekar || 0) * (t.alanDekar || 0);
-      const gelir = uretim * DB.urunFiyat(t.urun);
+      const gelir = uretim * DB.urunFiyat(t.urun, YIL);
       const gider = totalGider * ((t.alanDekar || 0) / totalDekar);
       return { ad: t.ad, urun: t.urun, dekar: t.alanDekar, uretim, gelir, gider, kar: gelir - gider, kgDekar: t.sonVerimKgDekar || 0, verim: t.verimPuani || 0 };
     }).sort((a, b) => b.kar - a.kar);
