@@ -128,6 +128,11 @@
       d.meta.migrateV1 = true;
       degisti = true;
     }
+    // 4) Çeşitler HİÇ boş kalmasın — satışa hazır standart liste. (Veri temizleme türleri silmez; bu sadece eski/boş ayarları onarır.)
+    if (d.ayarlar) {
+      if (!d.ayarlar.giderTurleri || !d.ayarlar.giderTurleri.length) { d.ayarlar.giderTurleri = VARSAYILAN_GIDER_TUR.slice(); degisti = true; }
+      if (!d.ayarlar.gelirCesitleri || !d.ayarlar.gelirCesitleri.length) { d.ayarlar.gelirCesitleri = VARSAYILAN_GELIR_CESIT.slice(); degisti = true; }
+    }
     if (degisti) { try { save(); } catch (e) {} }
   }
 
@@ -273,6 +278,9 @@
   }
 
   // ---- BOŞ başlangıç (yeni kurulum / satış / sıfırlama) — demo veri YOK ----
+  // Satışa hazır VARSAYILAN çeşitler — boş/sıfır/satış kurulumunda da HEP mevcut (yalnızca data boş başlar)
+  const VARSAYILAN_GIDER_TUR = ["Fındık çipil temizlik işçilik", "Kalın dal budama", "Gübre bedeli", "Gübre işçilik bedeli", "İlk tırpan işçilik bedeli", "Tırpan yakıt gideri", "Motor tamir misina bedeli", "Hasat işçilik bedeli", "Çapalama bedeli", "İlaçlama bedeli", "Patoz işçilik bedeli", "Yemek bedeli", "Diğer"];
+  const VARSAYILAN_GELIR_CESIT = ["Hasat", "İşçi Kiralama", "Ev Kira", "Diğer"];
   function bosVeri() {
     return {
       meta: { version: 1, kurulum: false },
@@ -281,7 +289,7 @@
         gubreFiyat: 0, iscilikFiyat: 0, mazotFiyat: 0,
         urunFiyat: {}, yevmiyeler: {}, grupBuyukluk: 20,
         hasatTarihi: "", konum: null,
-        giderTurleri: [], gelirCesitleri: ["Hasat", "İşçi Kiralama", "Ev Kira", "Diğer"]
+        giderTurleri: VARSAYILAN_GIDER_TUR.slice(), gelirCesitleri: VARSAYILAN_GELIR_CESIT.slice()
       },
       tarlalar: [], gelirler: [], giderler: [], isler: [], isciKiralamalar: [],
       isTakip: [], puantaj: [], hasatlar: [], aktifIsci: 0

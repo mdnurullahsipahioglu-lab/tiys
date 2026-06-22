@@ -80,14 +80,14 @@
   function gelirFields() {
     return [
       { key: "tarih", label: "Tarih", type: "date", required: true },
-      { key: "cesit", label: "Gelir Çeşidi", type: "select", options: (D.load().ayarlar.gelirCesitleri || ["Hasat", "İşçi Kiralama", "Ev Kira", "Diğer"]) },
+      { key: "cesit", label: "Gelir Çeşidi", type: "select", options: ((D.load().ayarlar.gelirCesitleri || []).length ? D.load().ayarlar.gelirCesitleri : ["Hasat", "İşçi Kiralama", "Ev Kira", "Diğer"]) },
       { key: "tutar", label: "Tutar (₺)", type: "money", required: true, placeholder: "0" },
       { key: "tarlaId", label: "Tarla (varsa)", type: "select", options: tarlaOptions() },
       { key: "aciklama", label: "Açıklama", type: "textarea", full: true, placeholder: "Not / detay" }
     ];
   }
   function giderFields(kategori) {
-    const turField = kategori === "genel" ? { key: "tur", label: "Gider Türü", type: "select", required: true, options: (D.load().ayarlar.giderTurleri || GENEL_TUR) }
+    const turField = kategori === "genel" ? { key: "tur", label: "Gider Türü", type: "select", required: true, options: ((D.load().ayarlar.giderTurleri || []).length ? D.load().ayarlar.giderTurleri : GENEL_TUR) }
       : kategori === "makine" ? { key: "tur", label: "Makine", type: "select", required: true, options: ["Motorlu tırpan", "Testere", "Patoz", "Traktör", "Diğer"] }
       : kategori === "yakit" ? { key: "tur", label: "Yakıt", type: "select", required: true, options: ["Benzin", "Motorin", "Yağ"] }
       : { key: "tur", label: "Ekipman", type: "select", required: true, options: ["Misina", "Zincir", "Koruyucu ekipman", "El aletleri", "Diğer"] };
@@ -472,8 +472,8 @@
       const GELIR_DEF = ["Hasat", "İşçi Kiralama", "Ev Kira", "Diğer"];
       const defFor = k => k === "giderTurleri" ? GENEL_TUR.slice() : GELIR_DEF.slice();
       const d = D.load();
-      const gider = d.ayarlar.giderTurleri || GENEL_TUR.slice();
-      const gelir = d.ayarlar.gelirCesitleri || GELIR_DEF.slice();
+      const gider = (d.ayarlar.giderTurleri && d.ayarlar.giderTurleri.length) ? d.ayarlar.giderTurleri : GENEL_TUR.slice();
+      const gelir = (d.ayarlar.gelirCesitleri && d.ayarlar.gelirCesitleri.length) ? d.ayarlar.gelirCesitleri : GELIR_DEF.slice();
       const chip = (x, key, i) => `<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);padding:4px 10px;border-radius:14px;font-size:12.5px">${esc(x)} <button data-del="${key}" data-i="${i}" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:13px;padding:0;line-height:1">✕</button></span>`;
       const liste = (arr, key) => arr.length ? arr.map((x, i) => chip(x, key, i)).join("") : '<span class="lead">— henüz yok —</span>';
       const inpStyle = "flex:1;padding:8px 10px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.15);border-radius:8px;color:inherit";
