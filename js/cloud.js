@@ -1,32 +1,27 @@
-/* TİYS — EŞLEŞTİRME KODU ile Senkron (hesap/şifre YOK)
- * 1 cihaz "Yeni eşleştirme" → kod üretir + verisini buluta koyar. Diğer cihazlar o kodu girer → bağlanır.
- * Sonra: KAYDET→buluta it (1.5sn); cihaza gelince/odaklanınca + 25sn'de bir çek. Cihaz değişiminde kayıp yok.
- * Güvenlik: anon tabloyu DÖKEMEZ; sadece kodu bilen RPC (tiys_oku/tiys_yaz) ile erişir. (SUPABASE_eslesme_kurulum.sql)
+/* TİYS — EŞLEŞTİRME KODU ile Senkron (hesap/şifre/SQL YOK) — Pantry (getpantry.cloud)
+ * 1 cihaz "Yeni eşleştirme" → 8 haneli kod üretir + verisini buluta koyar. Diğer cihazlar o kodu girer → bağlanır.
+ * Sonra: KAYDET→buluta it (1.5sn); cihaza gelince/odaklanınca + 25sn'de bir çek; internet gelince otomatik senkron.
+ * Çevrimdışı çalışır (tarlada internet yok): yerel her zaman ana kaynak; bağlanınca eşitlenir. Cihaz değişiminde kayıp yok.
  */
 (function (global) {
   "use strict";
 
-  // ===================== KONFİG (Supabase projenden) =====================
-  const SUPABASE_URL = "https://mpibjupaxkhmbrbmzmtk.supabase.co";
-  const SUPABASE_ANON = "sb_publishable_2TNH2DCr1l1Y6PqrNnZUXg_Mk6WhN8s"; // publishable (client-safe)
+  // ===================== KONFİG =====================
+  const PANTRY_ID = "7ea60ce2-b66d-4c99-8993-7704ed5aca40";   // getpantry.cloud pantry kimliği (Rıfat, 2026-06-22; herkese ortak)
+  const PANTRY_BASE = "https://getpantry.cloud/apiv1/pantry";
   const KOD_KEY = "tiys_eslesme_kodu";
   const ALFABE = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // karışıkları çıkardık: 0/O/1/I/L yok
-  // =======================================================================
+  // ==================================================
 
-  let client = null, kod = null, pushTimer = null, lastSync = null;
+  let kod = null, pushTimer = null, lastSync = null;
   let sonBilinenBulut = null;   // gördüğümüz son bulut 'guncelleme' damgası — kendi push'umuzu geri çekmeyiz
   let yerelDegisti = false;     // kullanıcı düzenledi, henüz buluta gitmedi
   let pullEdiyor = false;       // pull import ederken tiys:save tetikleniyor → geri-push döngüsünü engelle
   let durum = "kapali";         // kapali | bagli | senkron | cevrimdisi | hata
   let pollTimer = null, dinleyiciKuruldu = false;
 
-  function configured() { return !!(SUPABASE_URL && SUPABASE_ANON); }
-  function libReady() { return !!(global.supabase && global.supabase.createClient); }
-  function getClient() {
-    if (!configured() || !libReady()) return null;
-    if (!client) client = global.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
-    return client;
-  }
+  function configured() { return !!PANTRY_ID && PANTRY_ID.indexOf("__") !== 0; }
+  function libReady() { return typeof global.fetch === "function"; }
   function emit() { try { global.dispatchEvent(new CustomEvent("tiys:cloud")); } catch (e) {} }
   function setDurum(d) { durum = d; emit(); }
   function kodGoster(k) { return k ? (k.slice(0, 4) + "-" + k.slice(4)) : null; }
@@ -40,6 +35,7 @@
     return s; // normalize (tiresiz) saklanır; gösterimde tire eklenir
   }
   function kodNormalize(x) { return (x || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase(); }
+  function basketAdi(k) { return "tiys-" + k; }   // pantry sepeti adı = kod (namespace'li)
 
   // Toplam kayıt sayısı — boş bulutla DOLU yereli SİLMEMEK için güvenlik
   function kayitSayisi(veri) {
@@ -51,8 +47,25 @@
     return n;
   }
 
+  // ---- Pantry HTTP (fetch + CORS) ----
+  async function pantryYaz(basket, payload) {   // POST = sepeti tamamen değiştir
+    const res = await fetch(PANTRY_BASE + "/" + PANTRY_ID + "/basket/" + encodeURIComponent(basket), {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error("yaz HTTP " + res.status);
+    return true;
+  }
+  async function pantryOku(basket) {            // GET; sepet yoksa 400 → null
+    const res = await fetch(PANTRY_BASE + "/" + PANTRY_ID + "/basket/" + encodeURIComponent(basket), {
+      method: "GET", headers: { "Accept": "application/json" }
+    });
+    if (res.status === 400 || res.status === 404) return null;
+    if (!res.ok) throw new Error("oku HTTP " + res.status);
+    return await res.json();
+  }
+
   async function restore() {
-    const c = getClient(); if (!c) { setDurum("kapali"); return; }
+    if (!configured() || !libReady()) { setDurum("kapali"); return; }
     try { kod = localStorage.getItem(KOD_KEY) || null; } catch (e) { kod = null; }
     if (kod) { setDurum("bagli"); await pull(true); baglantiKur(); }
     else setDurum("kapali");
@@ -60,7 +73,7 @@
 
   // İlk cihaz: kod üret + mevcut yerel veriyi buluta koy
   async function kodOlustur() {
-    const c = getClient(); if (!c) return { error: "Bulut yapılandırılmadı (internet?)" };
+    if (!configured()) return { error: "Bulut yapılandırılmadı" };
     kod = kodUret();
     try { localStorage.setItem(KOD_KEY, kod); } catch (e) {}
     sonBilinenBulut = null;
@@ -70,9 +83,9 @@
     return { ok: true, kod: kodGoster(kod) };
   }
 
-  // Diğer cihaz: kodu gir → bulut verisini al (varsa). yerelVar=true ise çağıran ONAY almıştır (yerel değişecek).
+  // Diğer cihaz: kodu gir → bulut verisini al (varsa)
   async function kodGir(girilen) {
-    const c = getClient(); if (!c) return { error: "Bulut yapılandırılmadı (internet?)" };
+    if (!configured()) return { error: "Bulut yapılandırılmadı" };
     const n = kodNormalize(girilen);
     if (n.length < 8) return { error: "Kod 8 karakter olmalı (ör. ABCD-EFGH)" };
     kod = n; try { localStorage.setItem(KOD_KEY, kod); } catch (e) {}
@@ -90,25 +103,30 @@
     baglantiKes(); setDurum("kapali");
   }
 
-  // Yerel → bulut (RPC)
+  // Yerel → bulut
   async function push() {
-    const c = getClient(); if (!c || !kod) return { error: "Eşleştirilmedi" };
+    if (!configured() || !kod) return { error: "Eşleştirilmedi" };
     setDurum("senkron");
-    const veri = JSON.parse(DB.exportJSON());
-    const { data, error } = await c.rpc("tiys_yaz", { p_kod: kod, p_veri: veri });
-    if (error) { setDurum("cevrimdisi"); return { error: error.message }; }
-    sonBilinenBulut = (typeof data === "string" ? data : new Date().toISOString());
-    yerelDegisti = false; lastSync = new Date(); setDurum("bagli"); return { ok: true };
+    let payload;
+    try {
+      const veri = JSON.parse(DB.exportJSON());
+      payload = { guncelleme: new Date().toISOString(), sayi: kayitSayisi(veri), veri: veri };
+    } catch (e) { setDurum("hata"); return { error: "veri okunamadı" }; }
+    try {
+      await pantryYaz(basketAdi(kod), payload);
+      sonBilinenBulut = payload.guncelleme;
+      yerelDegisti = false; lastSync = new Date(); setDurum("bagli"); return { ok: true };
+    } catch (e) { setDurum("cevrimdisi"); return { error: String(e.message || e) }; }
   }
 
-  // Bulut → yerel (RPC) — GÜVENLİ: boş bulut dolu yereli silmez; sadece daha YENİ bulutu alır;
+  // Bulut → yerel — GÜVENLİ: boş bulut dolu yereli silmez; sadece daha YENİ bulutu alır;
   // push edilmemiş yerel düzenlemenin üstüne yazmaz; import sırasında geri-push tetiklemez
   async function pull(sessiz) {
-    const c = getClient(); if (!c || !kod) return { error: "Eşleştirilmedi" };
+    if (!configured() || !kod) return { error: "Eşleştirilmedi" };
     if (yerelDegisti) return { ok: true, beklemede: true };
-    const { data, error } = await c.rpc("tiys_oku", { p_kod: kod });
-    if (error) { setDurum("cevrimdisi"); return { error: error.message }; }
-    const row = Array.isArray(data) ? data[0] : data;
+    let row;
+    try { row = await pantryOku(basketAdi(kod)); }
+    catch (e) { setDurum("cevrimdisi"); return { error: String(e.message || e) }; }
     if (!row || !row.veri) return { ok: true, vardi: false };
     const yerel = JSON.parse(DB.exportJSON());
     if (kayitSayisi(row.veri) === 0 && kayitSayisi(yerel) > 0) { setDurum("bagli"); return { ok: true, korundu: true }; }
@@ -129,7 +147,7 @@
     pushTimer = setTimeout(function () { push(); }, 1500);
   });
 
-  // Cihaz değişiminde kayıp OLMASIN: ayrılırken bekleyeni gönder, gelince çek
+  // Cihaz değişiminde / internet gelince kayıp OLMASIN
   function flushPush() { if (kod && yerelDegisti) { clearTimeout(pushTimer); push(); } }
   function gelincePull() { if (!kod) return; if (yerelDegisti) flushPush(); else pull(false); }
 
@@ -141,6 +159,7 @@
       global.addEventListener("blur", flushPush);
       global.addEventListener("pagehide", flushPush);
       global.addEventListener("beforeunload", flushPush);
+      global.addEventListener("online", gelincePull);   // internet gelince otomatik senkron (tarladan eve dönünce)
     }
     clearInterval(pollTimer);
     pollTimer = setInterval(function () { if (!document.hidden && kod) gelincePull(); }, 25000);
