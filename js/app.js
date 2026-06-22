@@ -80,7 +80,6 @@
   function gelirFields() {
     return [
       { key: "tarih", label: "Tarih", type: "date", required: true },
-      { key: "cesit", label: "Gelir Çeşidi", type: "select", options: ((D.load().ayarlar.gelirCesitleri || []).length ? D.load().ayarlar.gelirCesitleri : ["Hasat", "İşçi Kiralama", "Ev Kira", "Diğer"]) },
       { key: "tutar", label: "Tutar (₺)", type: "money", required: true, placeholder: "0" },
       { key: "tarlaId", label: "Tarla (varsa)", type: "select", options: tarlaOptions() },
       { key: "aciklama", label: "Açıklama", type: "textarea", full: true, placeholder: "Not / detay" }

@@ -176,7 +176,7 @@
   function tarlaVerimSirasi() {
     return coll("tarlalar").slice().map(t => {
       const h = coll("hasatlar").filter(x => x.tarlaId === t.id).sort((a, b) => new Date(b.tarih) - new Date(a.tarih))[0];
-      const kgDekar = h && t.alanDekar ? Math.round(h.kuruUrun / t.alanDekar) : (t.sonVerimKgDekar || 0);
+      const kgDekar = (h && t.alanDekar && Number(h.kuruUrun)) ? Math.round(Number(h.kuruUrun) / t.alanDekar) : (t.sonVerimKgDekar || 0);
       return { ad: t.ad, kgDekar, puan: t.verimPuani || 0 };
     }).sort((a, b) => b.puan - a.puan);
   }

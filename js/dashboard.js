@@ -40,12 +40,13 @@
     const kiralar = DB.coll("isciKiralamalar").slice().sort((a, b) => new Date(b.tarih) - new Date(a.tarih)).slice(0, 5);
     const borcOzet = DB.musteriOzet();
     const borclu = borcOzet.filter(o => o.kalan > 0.5);
-    const toplamAlacak = borcOzet.reduce((a, x) => a + x.kalan, 0);
+    const toplamAlacak = borclu.reduce((a, x) => a + x.kalan, 0);
     const urunler = urunOzet();
 
-    // hasat geri sayımı
-    const hasatT = new Date(DB.load().ayarlar.hasatTarihi);
-    const gunKaldi = Math.max(0, Math.ceil((hasatT - new Date(2026, 5, 13)) / 86400000));
+    // hasat geri sayımı — GERÇEK bugüne göre; tarih boşsa (yeni/satış kurulumu) "—"
+    const _ht = DB.load().ayarlar.hasatTarihi;
+    const hasatT = _ht ? new Date(_ht) : null;
+    const gunKaldi = (hasatT && !isNaN(hasatT.getTime())) ? Math.max(0, Math.ceil((hasatT - new Date()) / 86400000)) : "—";
 
     view.innerHTML = `
     ${(DB.kurulumGerekli && DB.kurulumGerekli()) ? `<div class="panel" style="background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;margin-bottom:14px;padding:18px 20px">
@@ -130,7 +131,7 @@
           <div class="countdown">
             <div>📅</div>
             <div><div><span class="num">${gunKaldi}</span> <span class="lab">Gün Kaldı</span></div>
-              <div class="lab" style="margin-top:8px">Tahmini Hasat Tarihi<br><b style="font-size:15px">${DB.dateTR(hasatT)}</b></div></div>
+              <div class="lab" style="margin-top:8px">Tahmini Hasat Tarihi<br><b style="font-size:15px">${hasatT ? DB.dateTR(hasatT) : "—"}</b></div></div>
             <div class="pic">🌰</div>
           </div>
           ${aiPanel()}

@@ -94,7 +94,7 @@
       return d + (ks.length ? "\n" + ks.map(k => k.musteri + " (" + k.kisi + ")").join("\n") : "");
     }));
     const ozetRows = bil.ayKira.slice().sort((a, b) => String(a.tarih).localeCompare(String(b.tarih)))
-      .map(k => [k.musteri || "—", aralik(k), Number(k.gun) || 0, Number(k.kisi) || 0, Math.round(Number(k.tutar) || 0)]);
+      .map(k => [k.musteri || "—", aralik(k), Number(k.gun) || (k.bitis && k.tarih ? Math.max(1, Math.round((new Date(k.bitis) - new Date(k.tarih)) / 86400000) + 1) : 0), Number(k.kisi) || 0, Math.round(Number(k.tutar) || 0)]);
     ozetRows.push(["", "", "", "TOPLAM", Math.round(bil.ayToplam)]);
     return {
       file: "TIYS-Takvim-" + _y + "-" + pad(_m + 1),

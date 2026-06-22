@@ -73,13 +73,14 @@
     // karar destek metrikleri (önümüzdeki 5 gün)
     const n = Math.min(5, d.time.length);
     let prob5 = 0, sum5 = 0, min7 = 99;
-    for (let i = 0; i < d.time.length; i++) { if (i < n) { prob5 = Math.max(prob5, d.precipitation_probability_max[i] || 0); sum5 += d.precipitation_sum[i] || 0; } min7 = Math.min(min7, d.temperature_2m_min[i]); }
+    for (let i = 0; i < d.time.length; i++) { if (i < n) { prob5 = Math.max(prob5, d.precipitation_probability_max[i] || 0); sum5 += d.precipitation_sum[i] || 0; } if (i < 7 && d.temperature_2m_min[i] != null) min7 = Math.min(min7, d.temperature_2m_min[i]); }
     const donVar = min7 < 2;
     const ilacUygun = !(prob5 >= 50 || sum5 >= 5);
     const gubre = sum5 >= 30 ? ["Erteleyin", "Aşırı yağış besinleri yıkar", "red"] : sum5 >= 3 ? ["İdeal", "Hafif yağış besini toprağa indirir", "green"] : ["Uygun", "Kuru — sonrasında sulama düşünün", "orange"];
     const budamaUygun = !donVar && sum5 < 10;
-    const hasatT = new Date(DB.load().ayarlar.hasatTarihi);
-    const gunKaldi = Math.max(0, Math.ceil((hasatT - new Date()) / 86400000));
+    const _ht = DB.load().ayarlar.hasatTarihi;
+    const hasatT = _ht ? new Date(_ht) : null;
+    const gunKaldi = (hasatT && !isNaN(hasatT.getTime())) ? Math.max(0, Math.ceil((hasatT - new Date()) / 86400000)) : null;
 
     // geçmiş yıllar yağış (archive)
     let yilYagis = null;
@@ -144,7 +145,7 @@
           ${oneri("🌿 Gübreleme", gubre[0].toUpperCase(), gubre[1], gubre[2])}
           ${oneri("✂️ Budama", budamaUygun ? "UYGUN" : "BEKLEYİN", budamaUygun ? "Hava kuru ve don riski yok." : (donVar ? "Don riski var, budamayı erteleyin." : "Yağışlı — kuru güne bırakın."), budamaUygun ? "green" : "orange")}
           ${oneri("❄️ Don Riski", donVar ? "VAR" : "DÜŞÜK", donVar ? `7 gün içinde min ${Math.round(min7)}°C — hassas dönemse koruma alın.` : `En düşük ${Math.round(min7)}°C — risk düşük.`, donVar ? "red" : "green")}
-          ${oneri("🌰 Hasat", gunKaldi + " GÜN", `Tahmini hasat: ${DB.dateTR(hasatT)}. Hasat öncesi kuru hava penceresi kollayın.`, "teal")}
+          ${oneri("🌰 Hasat", gunKaldi != null ? gunKaldi + " GÜN" : "—", gunKaldi != null ? `Tahmini hasat: ${DB.dateTR(hasatT)}. Hasat öncesi kuru hava penceresi kollayın.` : "Hasat tarihi girilmedi (Ayarlar → işletme bilgileri).", "teal")}
           ${oneri("💧 Sulama", sum5 < 3 ? "GEREKEBİLİR" : "GEREKMEZ", sum5 < 3 ? "5 günde kayda değer yağış yok." : `5 günde ~${Math.round(sum5)} mm yağış bekleniyor.`, sum5 < 3 ? "orange" : "green")}
         </div>
       </div>

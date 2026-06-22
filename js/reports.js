@@ -74,8 +74,8 @@
     }));
     // yıllık (şimdilik tek yıl; gerçek yıllar biriktikçe çoğalır)
     const yillar = {}; ["gelirler", "giderler"].forEach(() => {});
-    DB.coll("gelirler").forEach(g => { const y = new Date(g.tarih).getFullYear(); (yillar[y] = yillar[y] || { g: 0, e: 0 }).g += g.tutar || 0; });
-    DB.coll("giderler").forEach(g => { const y = new Date(g.tarih).getFullYear(); (yillar[y] = yillar[y] || { g: 0, e: 0 }).e += g.tutar || 0; });
+    DB.coll("gelirler").forEach(g => { const y = new Date(g.tarih).getFullYear(); if (!y || isNaN(y)) return; (yillar[y] = yillar[y] || { g: 0, e: 0 }).g += g.tutar || 0; });
+    DB.coll("giderler").forEach(g => { const y = new Date(g.tarih).getFullYear(); if (!y || isNaN(y)) return; (yillar[y] = yillar[y] || { g: 0, e: 0 }).e += g.tutar || 0; });
     const yl = Object.keys(yillar).sort();
     _charts.push(new Chart(document.getElementById("yilChart"), {
       type: "bar",
@@ -101,9 +101,12 @@
         const map = {}; let genel = 0;
         gid.forEach(g => { if (g.tarlaId) map[g.tarlaId] = (map[g.tarlaId] || 0) + (Number(g.tutar) || 0); else genel += (Number(g.tutar) || 0); });
         const rows = DB.coll("tarlalar").map(t => ({ ad: t.ad, tutar: map[t.id] || 0 })).filter(r => r.tutar > 0).sort((a, b) => b.tutar - a.tutar);
-        const toplam = rows.reduce((a, x) => a + x.tutar, 0) + genel;
-        box.innerHTML = (rows.length || genel > 0) ? `<table class="t"><thead><tr><th>Tarla</th><th style="text-align:right">Toplam Gider</th></tr></thead><tbody>
+        const mevcutIds = {}; DB.coll("tarlalar").forEach(t => mevcutIds[t.id] = 1);
+        let oksuz = 0; Object.keys(map).forEach(id => { if (!mevcutIds[id]) oksuz += map[id]; });
+        const toplam = rows.reduce((a, x) => a + x.tutar, 0) + genel + oksuz;
+        box.innerHTML = (rows.length || genel > 0 || oksuz > 0) ? `<table class="t"><thead><tr><th>Tarla</th><th style="text-align:right">Toplam Gider</th></tr></thead><tbody>
           ${rows.map(r => `<tr><td>${escR(r.ad)}</td><td style="text-align:right;font-weight:600">${DB.money(r.tutar)}</td></tr>`).join("")}
+          ${oksuz > 0 ? `<tr><td style="color:var(--muted)">— Silinmiş tarla —</td><td style="text-align:right">${DB.money(oksuz)}</td></tr>` : ""}
           ${genel > 0 ? `<tr><td style="color:var(--muted)">— Tarlasız (genel) —</td><td style="text-align:right">${DB.money(genel)}</td></tr>` : ""}
           <tr style="border-top:2px solid var(--line,#e5e7eb)"><td style="font-weight:700">TOPLAM</td><td style="text-align:right;font-weight:700;color:var(--red)">${DB.money(toplam)}</td></tr>
         </tbody></table>` : `<div class="lead">Henüz tarlaya bağlı gider girilmemiş. Gider eklerken "Tarla" seç ya da Tarla Yönetimi → tarlaya tıkla → Gider Ekle.</div>`;
@@ -125,6 +128,9 @@
         const map = {}; let genel = 0;
         gid.forEach(g => { if (g.tarlaId) map[g.tarlaId] = (map[g.tarlaId] || 0) + (Number(g.tutar) || 0); else genel += (Number(g.tutar) || 0); });
         const rows = DB.coll("tarlalar").map(t => [t.ad, Math.round(map[t.id] || 0)]).filter(r => r[1] > 0).sort((a, b) => b[1] - a[1]);
+        const mevcutIds = {}; DB.coll("tarlalar").forEach(t => mevcutIds[t.id] = 1);
+        let oksuz = 0; Object.keys(map).forEach(id => { if (!mevcutIds[id]) oksuz += map[id]; });
+        if (oksuz > 0) rows.push(["— Silinmiş tarla —", Math.round(oksuz)]);
         if (genel > 0) rows.push(["— Tarlasız (genel) —", Math.round(genel)]);
         return { file: "TIYS-Tarla-Gider-Ozet", title: "TİYS — Tarla Bazlı Gider Özeti", tables: [{ name: "Tarla Giderleri", headers: ["Tarla", "Toplam Gider (₺)"], rows }] };
       }
