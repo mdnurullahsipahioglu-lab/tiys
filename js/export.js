@@ -87,5 +87,27 @@
     if (d) d.onclick = function () { var b = build(); if (!b || !b.tables || !b.tables.length || !b.tables[0].rows.length) { alert("Aktarılacak kayıt yok."); return; } word(b.file, b.title || b.file, b.tables); };
   }
 
-  global.Export = { excel: excel, word: word, importExcel: importExcel, bar: bar, wire: wire, clean: clean };
+  // İçe-aktar butonu (liste sayfaları için, Excel ver'in yanına)
+  function importBtn(name) {
+    return '<button class="btn ghost" data-xlsimp="' + name + '" title="Excel (.xlsx) dosyasından kayıt ekle">📥 Excel\'den Al</button>';
+  }
+  // İçe-aktar butonunu bağla: dosya seç → ilk sayfanın satırlarını onRows'a ver
+  function wireImport(root, name, onRows) {
+    var b = root.querySelector('[data-xlsimp="' + name + '"]');
+    if (!b) return;
+    b.onclick = function () {
+      var inp = document.createElement("input"); inp.type = "file"; inp.accept = ".xlsx,.xls";
+      inp.onchange = function (e) {
+        var f = e.target.files[0]; if (!f) return;
+        importExcel(f, function (err, out) {
+          if (err) { alert("Excel okunamadı: " + (err.message || err)); return; }
+          var sheet = Object.keys(out || {})[0];
+          onRows((sheet && out[sheet]) || []);
+        });
+      };
+      inp.click();
+    };
+  }
+
+  global.Export = { excel: excel, word: word, importExcel: importExcel, bar: bar, importBtn: importBtn, wire: wire, wireImport: wireImport, clean: clean };
 })(window);

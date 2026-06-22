@@ -32,7 +32,7 @@
         const total = opts.total ? opts.total(rows) : null;
         v.innerHTML = `
           <div class="page-head"><div><h2 style="margin:0">${opts.title}</h2><div class="lead">${opts.lead || ""}</div></div>
-            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${Export.bar('crud')}<button class="btn primary" data-add>➕ ${opts.addLabel || "Yeni Kayıt"}</button></div></div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${Export.bar('crud')}${Export.importBtn('crud')}<button class="btn primary" data-add>➕ ${opts.addLabel || "Yeni Kayıt"}</button></div></div>
           ${total != null ? `<div class="kpis" style="grid-template-columns:repeat(3,1fr);max-width:600px">
             ${miniKpi("teal", opts.totalLabel || "Toplam", D.money(total))}${miniKpi("blue", "Kayıt", D.num(rows.length))}${opts.extraKpi ? opts.extraKpi(rows) : ""}</div>` : ""}
           <div class="panel" style="margin-top:14px">
@@ -46,6 +46,26 @@
         v.querySelectorAll("[data-del]").forEach(b => b.onclick = e => { e.stopPropagation(); if (confirm("Bu kaydı silmek istediğine emin misin?")) { D.remove(opts.coll, rows[+b.dataset.del].id); Forms.toast("Silindi"); refresh(); } });
         v.querySelectorAll("tbody tr").forEach(tr => tr.onclick = () => (opts.onRowClick ? opts.onRowClick(rows[+tr.dataset.i], refresh) : openForm(rows[+tr.dataset.i])));
         Export.wire(v, 'crud', () => ({ file: opts.title, title: "TİYS — " + opts.title, tables: [{ name: opts.title, headers: opts.cols.map(c => c.h), rows: rows.map(r => opts.cols.map(c => Export.clean(c.v(r)))) }] }));
+        Export.wireImport(v, 'crud', function (satirlar) {
+          if (!satirlar || !satirlar.length) { alert("Excel'de satır bulunamadı.\nİpucu: önce 📊 Excel ile dışa aktar, dosyayı doldur, sonra 📥 ile geri yükle."); return; }
+          const flds = (typeof opts.fields === "function" ? opts.fields() : opts.fields) || [];
+          const nrm = s => String(s || "").toLowerCase().trim().replace(/ı/g, "i").replace(/ü/g, "u").replace(/ş/g, "s").replace(/ö/g, "o").replace(/ç/g, "c").replace(/ğ/g, "g");
+          const harita = {}; flds.forEach(f => { if (f.key) { harita[nrm(f.label)] = f; harita[nrm(f.key)] = f; } });
+          let eklenen = 0;
+          satirlar.forEach(row => {
+            const obj = Object.assign({}, opts.defaults || {}); let doluVar = false;
+            Object.keys(row).forEach(col => {
+              const f = harita[nrm(col)]; if (!f) return;
+              let val = row[col]; if (val === "" || val == null) return;
+              if (f.type === "money" || f.type === "number") val = parseFloat(String(val).replace(/[^\d.,-]/g, "").replace(/\.(?=\d{3}\b)/g, "").replace(",", ".")) || 0;
+              else if (f.type === "date") { const s = String(val).trim(); const m = s.match(/^(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{4})/); if (m) val = m[3] + "-" + ("0" + m[2]).slice(-2) + "-" + ("0" + m[1]).slice(-2); else if (/^\d{4,5}(\.\d+)?$/.test(s)) val = new Date(Math.round((parseFloat(s) - 25569) * 86400000)).toISOString().slice(0, 10); }
+              obj[f.key] = val; doluVar = true;
+            });
+            if (doluVar) { D.add(opts.coll, obj); eklenen++; }
+          });
+          if (eklenen) { Forms.toast(eklenen + " kayıt Excel'den eklendi ✓"); refresh(); }
+          else alert("Eşleşen sütun bulunamadı.\nExcel'in başlık satırı şu alanlarla aynı olmalı (ör: " + flds.slice(0, 4).map(f => f.label).join(", ") + ").");
+        });
       }
       renderInto(view);
     };
