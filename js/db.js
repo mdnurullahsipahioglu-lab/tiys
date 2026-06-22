@@ -287,7 +287,14 @@
       isTakip: [], puantaj: [], hasatlar: [], aktifIsci: 0
     };
   }
-  function bosla() { _data = bosVeri(); save(); return _data; }   // TÜM veriyi sıfırla (yeni işletme)
+  function bosla() { _data = bosVeri(); save(); return _data; }   // TÜM veriyi sıfırla (yeni işletme / satış)
+  // Sadece girilen GÜNLÜK kayıtları siler; çeşitler/türler, sabit fiyatlar, tarlalar ve ayarlar KORUNUR
+  function gunlukTemizle() {
+    const d = load();
+    ["gelirler", "giderler", "hasatlar", "isler", "isciKiralamalar", "isTakip", "puantaj"].forEach(function (k) { d[k] = []; });
+    d.aktifIsci = 0;
+    save(); return d;
+  }
   function kurulumTamam() { const d = load(); if (!d.meta) d.meta = {}; d.meta.kurulum = true; save(); }
   function kurulumGerekli() { const d = load(); return !(d.meta && d.meta.kurulum) && coll("tarlalar").length === 0; }
 
@@ -322,7 +329,7 @@
 
   // ---- Dışa aç -------------------------------------------------------------
   global.DB = {
-    load, save, reset, bosla, bosVeri, kurulumGerekli, kurulumTamam, coll, add, update, remove,
+    load, save, reset, bosla, gunlukTemizle, bosVeri, kurulumGerekli, kurulumTamam, coll, add, update, remove,
     money, num, dateTR, dateTimeTR, uid,
     toplamGelir, toplamGider, netKar, toplamDekar,
     giderDagilimi, gelirDagilimi, aylikTrend, tarlaVerimSirasi,

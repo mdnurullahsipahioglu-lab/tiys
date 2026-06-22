@@ -311,7 +311,9 @@
             <button class="btn ghost" id="b_import">📥 Gelen Veriyi Yükle</button>
             <input type="file" id="b_file" accept="application/json" class="hidden">
             <button class="btn ghost" id="b_export">⬇️ Yedek Al (JSON indir)</button>
-            <button class="btn danger" id="b_reset">🗑️ Tüm Verileri Sıfırla (yeni işletme)</button>
+            <button class="btn danger" id="b_reset">🧹 Verileri Temizle (gelir/gider/hasat kayıtları)</button>
+            <p class="lead" style="margin:-4px 0 8px;font-size:12px;opacity:.7">Sadece girilen günlük kayıtları siler. Çeşitler/türler, sabit fiyatlar, tarlalar ve ayarlar korunur.</p>
+            <button class="btn ghost" id="b_full" style="font-size:12px;opacity:.65">🗑️ Her Şeyi Sıfırla — çeşitler + tarlalar dahil (yeni işletme / satış)</button>
             <button class="btn ghost" id="b_demo" style="font-size:12px;opacity:.65">🎬 Demo verileri yükle (deneme için)</button>
           </div>
           <p class="lead" style="margin-top:14px">🔒 Tüm veri yalnızca bu cihazda saklanır.${(window.tiysFS && window.tiysFS.yol) ? ' <b>Masaüstü:</b> verileriniz <code style="font-size:11px">' + String(window.tiysFS.yol()).replace(/</g, "&lt;") + '</code> dosyasında kalıcı tutulur — programı güncellemek/yeniden kurmak verilerinizi SİLMEZ.' : ''}</p>
@@ -420,7 +422,8 @@
       const rdr = new FileReader(); rdr.onload = () => { if (D.importJSON(rdr.result)) { Forms.toast("Yedek yüklendi ✓"); FIYS.route(); } else Forms.toast("Geçersiz yedek dosyası"); };
       rdr.readAsText(file);
     };
-    view.querySelector("#b_reset").onclick = () => { if (confirm("DİKKAT: Girilen TÜM veriler (tarlalar, gelir, gider, ayarlar, konum) kalıcı silinecek ve program sıfırdan, boş başlayacak. Emin misin?")) { D.bosla(); Forms.toast("Tüm veriler sıfırlandı — yeni işletme"); location.hash = "#/dashboard"; FIYS.route(); } };
+    view.querySelector("#b_reset").onclick = () => { if (confirm("Girilen GÜNLÜK kayıtlar (gelir, gider, hasat, iş, puantaj, işçi kiralama) silinecek.\n\nÇeşitler/türler, sabit fiyatlar, tarlalar ve ayarlar KORUNACAK. Emin misin?")) { D.gunlukTemizle(); Forms.toast("Günlük kayıtlar temizlendi (çeşitler ve tarlalar korundu)"); location.hash = "#/dashboard"; FIYS.route(); } };
+    var bFull = view.querySelector("#b_full"); if (bFull) bFull.onclick = () => { if (confirm("DİKKAT: Çeşitler/türler, sabit fiyatlar, tarlalar ve ayarlar DAHİL girilen HER ŞEY kalıcı silinecek; program sıfırdan, boş başlayacak (yeni işletme / satış). Emin misin?")) { D.bosla(); Forms.toast("Her şey sıfırlandı — yeni işletme"); location.hash = "#/dashboard"; FIYS.route(); } };
     var bDemo = view.querySelector("#b_demo"); if (bDemo) bDemo.onclick = () => { if (confirm("Deneme için örnek (demo) veriler yüklensin mi? Mevcut verinin yerine geçer.")) { D.reset(); Forms.toast("Demo veriler yüklendi"); location.hash = "#/dashboard"; FIYS.route(); } };
 
     function renderCloud() {
