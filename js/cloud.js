@@ -21,7 +21,7 @@
   let pollTimer = null, dinleyiciKuruldu = false;
 
   function configured() { return !!PANTRY_ID && PANTRY_ID.indexOf("__") !== 0; }
-  function libReady() { return typeof global.fetch === "function"; }
+  function libReady() { return typeof global.fetch === "function" && !!(global.CryptoJS && global.CryptoJS.AES); }
   function emit() { try { global.dispatchEvent(new CustomEvent("tiys:cloud")); } catch (e) {} }
   function setDurum(d) { durum = d; emit(); }
   function kodGoster(k) { return k ? (k.slice(0, 4) + "-" + k.slice(4)) : null; }
@@ -35,7 +35,9 @@
     return s; // normalize (tiresiz) saklanır; gösterimde tire eklenir
   }
   function kodNormalize(x) { return (x || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase(); }
-  function basketAdi(k) { return "tiys-" + k; }   // pantry sepeti adı = kod (namespace'li)
+  function basketAdi(k) { return "tiys-" + global.CryptoJS.SHA256("tiys:" + k).toString().slice(0, 32); }   // sepet adı = kod HASH'i → kodlar pantry listesinde görünmez
+  function sifrele(metin, k) { return global.CryptoJS.AES.encrypt(metin, k).toString(); }
+  function cozumle(sifre, k) { try { var t = global.CryptoJS.AES.decrypt(sifre, k).toString(global.CryptoJS.enc.Utf8); return t || ""; } catch (e) { return ""; } }
 
   // Toplam kayıt sayısı — boş bulutla DOLU yereli SİLMEMEK için güvenlik
   function kayitSayisi(veri) {
@@ -109,8 +111,8 @@
     setDurum("senkron");
     let payload;
     try {
-      const veri = JSON.parse(DB.exportJSON());
-      payload = { guncelleme: new Date().toISOString(), sayi: kayitSayisi(veri), veri: veri };
+      const veriStr = DB.exportJSON();   // veri ŞİFRELİ (c); guncelleme+sayi düz kalır (damga/sayaç hassas değil, korumalar şifre çözmeden çalışır)
+      payload = { enc: 1, guncelleme: new Date().toISOString(), sayi: kayitSayisi(JSON.parse(veriStr)), c: sifrele(veriStr, kod) };
     } catch (e) { setDurum("hata"); return { error: "veri okunamadı" }; }
     try {
       await pantryYaz(basketAdi(kod), payload);
@@ -127,12 +129,18 @@
     let row;
     try { row = await pantryOku(basketAdi(kod)); }
     catch (e) { setDurum("cevrimdisi"); return { error: String(e.message || e) }; }
-    if (!row || !row.veri) return { ok: true, vardi: false };
+    if (!row) return { ok: true, vardi: false };
+    // şifreli (enc:1) → çöz; eski düz kayıt (veri) → olduğu gibi (geriye uyumlu)
+    let veriStr = null;
+    if (row.enc && row.c) { veriStr = cozumle(row.c, kod); if (!veriStr) { setDurum("hata"); return { error: "Bulut çözülemedi (kod uyuşmuyor olabilir)" }; } }
+    else if (row.veri) { veriStr = JSON.stringify(row.veri); }
+    if (!veriStr) return { ok: true, vardi: false };
+    const bulutVeri = JSON.parse(veriStr);
     const yerel = JSON.parse(DB.exportJSON());
-    if (kayitSayisi(row.veri) === 0 && kayitSayisi(yerel) > 0) { setDurum("bagli"); return { ok: true, korundu: true }; }
+    if (kayitSayisi(bulutVeri) === 0 && kayitSayisi(yerel) > 0) { setDurum("bagli"); return { ok: true, korundu: true }; }
     if (row.guncelleme && sonBilinenBulut && row.guncelleme <= sonBilinenBulut) { setDurum("bagli"); return { ok: true, guncel: true }; }
     pullEdiyor = true;
-    try { DB.importJSON(JSON.stringify(row.veri)); } finally { pullEdiyor = false; }
+    try { DB.importJSON(veriStr); } finally { pullEdiyor = false; }
     sonBilinenBulut = row.guncelleme || sonBilinenBulut;
     lastSync = new Date(); setDurum("bagli");
     if (!sessiz && global.FIYS) FIYS.route();
