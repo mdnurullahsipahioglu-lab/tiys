@@ -72,15 +72,15 @@
         if (raw) { _data = JSON.parse(raw); migrate(_data); return _data; }
         // dosya yok → eski localStorage verisini taşı (varsa), yoksa demo başlat
         let ls = null; try { ls = localStorage.getItem(KEY); } catch (e) {}
-        _data = ls ? JSON.parse(ls) : seed();
+        _data = ls ? JSON.parse(ls) : bosVeri();
         save(); // ilk yazımda dosyaya kaydet
         migrate(_data); return _data;
       } catch (e) { /* dosya hatası → localStorage'a düş */ }
     }
     try {
       const raw = localStorage.getItem(KEY);
-      _data = raw ? JSON.parse(raw) : seed();
-    } catch (e) { _data = seed(); }
+      _data = raw ? JSON.parse(raw) : bosVeri();
+    } catch (e) { _data = bosVeri(); }
     if (!localStorage.getItem(KEY)) save();
     migrate(_data); return _data;
   }
@@ -272,6 +272,25 @@
     };
   }
 
+  // ---- BOŞ başlangıç (yeni kurulum / satış / sıfırlama) — demo veri YOK ----
+  function bosVeri() {
+    return {
+      meta: { version: 1, kurulum: false },
+      ayarlar: {
+        isletmeAdi: "", yonetici: "", gelistirici: "", iletisim: "",
+        gubreFiyat: 0, iscilikFiyat: 0, mazotFiyat: 0,
+        urunFiyat: {}, yevmiyeler: {}, grupBuyukluk: 20,
+        hasatTarihi: "", konum: null,
+        giderTurleri: [], gelirCesitleri: ["Hasat", "İşçi Kiralama", "Ev Kira", "Diğer"]
+      },
+      tarlalar: [], gelirler: [], giderler: [], isler: [], isciKiralamalar: [],
+      isTakip: [], puantaj: [], hasatlar: [], aktifIsci: 0
+    };
+  }
+  function bosla() { _data = bosVeri(); save(); return _data; }   // TÜM veriyi sıfırla (yeni işletme)
+  function kurulumTamam() { const d = load(); if (!d.meta) d.meta = {}; d.meta.kurulum = true; save(); }
+  function kurulumGerekli() { const d = load(); return !(d.meta && d.meta.kurulum) && coll("tarlalar").length === 0; }
+
   // ---- İşçi kiralama / müşteri borç hanesi ---------------------------------
   function yevmiyeFor(yil) {
     const v = yilDeger(load().ayarlar.yevmiyeler, yil);
@@ -303,7 +322,7 @@
 
   // ---- Dışa aç -------------------------------------------------------------
   global.DB = {
-    load, save, reset, coll, add, update, remove,
+    load, save, reset, bosla, bosVeri, kurulumGerekli, kurulumTamam, coll, add, update, remove,
     money, num, dateTR, dateTimeTR, uid,
     toplamGelir, toplamGider, netKar, toplamDekar,
     giderDagilimi, gelirDagilimi, aylikTrend, tarlaVerimSirasi,

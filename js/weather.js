@@ -17,10 +17,12 @@
 
   function render(view) {
     destroy();
-    const k = DB.load().ayarlar.konum || { lat: 40.985, lng: 36.742, ad: "Merkez" };
+    const k = DB.load().ayarlar.konum;
+    if (!k || k.lat == null) { konumAyarla(view); return; }   // konum yoksa: kişiye özel, bir kez kurulum
     view.innerHTML = `
-      <div class="page-head"><div><h2 style="margin:0">Hava ve Karar Destek</h2><div class="lead">${k.ad} · Open-Meteo verisiyle akıllı öneriler</div></div></div>
+      <div class="page-head"><div><h2 style="margin:0">Hava ve Karar Destek</h2><div class="lead">${k.ad || "Konumum"} · Open-Meteo verisiyle akıllı öneriler · <a href="#" id="wxKonum" style="color:var(--blue)">📍 konumu değiştir</a></div></div></div>
       <div class="panel"><div id="wxLoad" class="empty"><div class="e-ico">🌦️</div>Hava verisi alınıyor…</div></div>`;
+    var wk = view.querySelector("#wxKonum"); if (wk) wk.onclick = function (e) { e.preventDefault(); konumAyarla(view); };
 
     const yil = new Date().getFullYear();
     const fc = `https://api.open-meteo.com/v1/forecast?latitude=${k.lat}&longitude=${k.lng}&current=temperature_2m,relative_humidity_2m,precipitation,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max&timezone=auto&forecast_days=16`;
@@ -29,6 +31,40 @@
     Promise.all([fetch(fc).then(r => r.json()), fetch(arch).then(r => r.json()).catch(() => null)])
       .then(([f, a]) => paint(view, k, f, a))
       .catch(() => { view.querySelector(".panel").innerHTML = `<div class="empty"><div class="e-ico">📡</div>Hava verisi alınamadı.<br>İnternet bağlantısını kontrol et — bu modül için bağlantı gerekir.</div>`; });
+  }
+
+  // Konum kişiye özel, bir kez girilir (GPS otomatik ya da elle). Sonra hep hatırlanır.
+  function konumAyarla(view) {
+    view.innerHTML = `<div class="page-head"><div><h2 style="margin:0">📍 Konumunu Ayarla</h2><div class="lead">Hava tahmini ve karar desteği için işletmenin/tarlanın konumunu <b>bir kez</b> gir. Sonra hep hatırlanır.</div></div></div>
+      <div class="panel" style="max-width:520px">
+        <button class="btn primary" id="ko_gps" style="width:100%;margin-bottom:14px">📡 Konumumu Otomatik Bul (GPS) — en kolayı</button>
+        <div class="lead" style="text-align:center;margin:0 0 12px">— ya da elle gir —</div>
+        <div class="form-grid">
+          <div class="field full"><label>Yer Adı</label><input id="ko_ad" placeholder="ör. Ormanlı / Bartın"></div>
+          <div class="field"><label>Enlem (lat)</label><input id="ko_lat" type="number" step="0.0001" placeholder="41.2010"></div>
+          <div class="field"><label>Boylam (lng)</label><input id="ko_lng" type="number" step="0.0001" placeholder="31.5943"></div>
+        </div>
+        <div style="margin-top:12px"><button class="btn primary" id="ko_kaydet">💾 Kaydet</button></div>
+        <p class="lead" id="ko_msg" style="margin-top:10px;font-size:12.5px">İpucu: GPS en kolayı — tarayıcı/uygulama konum izni ister, bir kez "izin ver" de.</p>
+      </div>`;
+    const msg = t => { const m = view.querySelector("#ko_msg"); if (m) m.textContent = t; };
+    function kaydet(lat, lng, ad) {
+      const d = DB.load(); d.ayarlar.konum = { lat: +(+lat).toFixed(5), lng: +(+lng).toFixed(5), ad: ad || "Konumum" }; DB.save();
+      if (global.Forms) Forms.toast("Konum kaydedildi ✓"); render(view);
+    }
+    view.querySelector("#ko_gps").onclick = () => {
+      if (!navigator.geolocation) { msg("Bu cihaz otomatik konumu desteklemiyor — elle gir."); return; }
+      msg("Konum alınıyor… (izin ver)");
+      navigator.geolocation.getCurrentPosition(
+        p => kaydet(p.coords.latitude, p.coords.longitude, "Konumum"),
+        e => msg("Otomatik bulunamadı (" + (e && e.message ? e.message : "izin yok") + ") — elle enlem/boylam gir.")
+      );
+    };
+    view.querySelector("#ko_kaydet").onclick = () => {
+      const lat = parseFloat(view.querySelector("#ko_lat").value), lng = parseFloat(view.querySelector("#ko_lng").value);
+      if (isNaN(lat) || isNaN(lng)) { msg("⚠️ Enlem ve boylam gir (ya da GPS'i kullan)."); return; }
+      kaydet(lat, lng, view.querySelector("#ko_ad").value.trim());
+    };
   }
 
   function paint(view, k, f, a) {

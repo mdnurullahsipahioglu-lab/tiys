@@ -48,6 +48,14 @@
     const gunKaldi = Math.max(0, Math.ceil((hasatT - new Date(2026, 5, 13)) / 86400000));
 
     view.innerHTML = `
+    ${(DB.kurulumGerekli && DB.kurulumGerekli()) ? `<div class="panel" style="background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;margin-bottom:14px;padding:18px 20px">
+      <div style="font-size:20px;font-weight:800;margin-bottom:6px">🌱 Hoş geldin! İşletmeni 3 adımda kur</div>
+      <div style="opacity:.95;font-size:13.5px;line-height:1.8">1️⃣ <b>Ayarlar</b> → işletme adı + yıl bazında sabit fiyatlar &nbsp; 2️⃣ <b>Tarla Yönetimi</b> → tarlalarını ekle &nbsp; 3️⃣ <b>Hava ve Karar Destek</b> → konumunu ayarla</div>
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+        <a href="#/ayarlar" style="background:#fff;color:#15803d;padding:8px 14px;border-radius:8px;font-weight:700;text-decoration:none">⚙️ Ayarlar</a>
+        <a href="#/tarlalar" style="background:rgba(255,255,255,.22);color:#fff;padding:8px 14px;border-radius:8px;font-weight:700;text-decoration:none">🗺️ Tarla Ekle</a>
+        <a href="#/hava" style="background:rgba(255,255,255,.22);color:#fff;padding:8px 14px;border-radius:8px;font-weight:700;text-decoration:none">📍 Konum</a>
+      </div></div>` : ""}
     <!-- Yıl seçici -->
     <div class="panel" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px;padding:12px 16px">
       <span style="font-weight:700">📅 Yıl:</span>
@@ -209,8 +217,9 @@
 
   function initMap(tarlalar) {
     const el = document.getElementById("tarlaMap"); if (!el || !global.L) return;
-    const c = DB.load().ayarlar.konum;
-    _map = L.map(el, { scrollWheelZoom: false }).setView([c.lat, c.lng], 13);
+    const konum = DB.load().ayarlar.konum;
+    const c = konum || (tarlalar[0] && tarlalar[0].lat != null ? { lat: tarlalar[0].lat, lng: tarlalar[0].lng } : { lat: 39.0, lng: 35.0 });
+    _map = L.map(el, { scrollWheelZoom: false }).setView([c.lat, c.lng], konum ? 13 : 6);
     const normal = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "© OpenStreetMap", maxZoom: 19 });
     const sat = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { attribution: "© Esri", maxZoom: 19 });
     normal.addTo(_map);
