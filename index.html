@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>TİYS — Tarım İşletme Yönetim Sistemi</title>
-<link rel="stylesheet" href="css/styles.css?v=24">
+<link rel="stylesheet" href="css/styles.css?v=25">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
 </head>
 <body>
@@ -55,7 +55,7 @@
       <a class="item" href="#/ai"><span class="ico">🤖</span> Yapay Zeka Asistanı</a>
       <a class="item" href="#/ayarlar"><span class="ico">⚙️</span> Ayarlar</a>
       <div class="logout"><a class="item" href="#" onclick="FIYS.cikisYap();return false;"><span class="ico">🚪</span> Çıkış Yap</a></div>
-      <div class="credit">© 2026 Rıfat Sipahioğlu<br><span>Tüm hakları saklıdır</span></div>
+      <div class="credit">© 2026 Rıfat Sipahioğlu<br><span>Tüm hakları Rıfat Sipahioğlu'na aittir</span></div>
     </nav>
   </aside>
   <div class="backdrop" id="backdrop" onclick="FIYS.closeSidebar()"></div>
@@ -69,6 +69,7 @@
       <div class="chip" id="wxChip"><span class="big">🌤️ 24°C</span> <span>Az Bulutlu</span></div>
       <div class="chip" id="dateChip">📅 —</div>
       <div class="chip" id="cloudChip" style="display:none"></div>
+      <div class="chip" id="lisChip" style="display:none"></div>
       <button class="icon-btn">🔔<span class="badge">5</span></button>
       <button class="icon-btn">✉️</button>
       <div class="avatar"><span class="ph">Y</span><span id="userName">Yönetici</span></div>
@@ -79,18 +80,19 @@
 
 <script src="vendor/chart.umd.min.js"></script>
 <script src="vendor/leaflet/leaflet.js"></script>
-<script src="js/db.js?v=24"></script>
-<script src="js/forms.js?v=24"></script>
-<script src="js/export.js?v=24"></script>
-<script src="js/isci.js?v=24"></script>
-<script src="js/ai.js?v=24"></script>
-<script src="js/dashboard.js?v=24"></script>
-<script src="js/reports.js?v=24"></script>
-<script src="js/takvim.js?v=24"></script>
-<script src="js/weather.js?v=24"></script>
-<script src="js/doviz.js?v=24"></script>
-<script src="js/app.js?v=24"></script>
+<script src="js/db.js?v=25"></script>
+<script src="js/forms.js?v=25"></script>
+<script src="js/export.js?v=25"></script>
+<script src="js/isci.js?v=25"></script>
+<script src="js/ai.js?v=25"></script>
+<script src="js/dashboard.js?v=25"></script>
+<script src="js/reports.js?v=25"></script>
+<script src="js/takvim.js?v=25"></script>
+<script src="js/weather.js?v=25"></script>
+<script src="js/doviz.js?v=25"></script>
 <script src="vendor/crypto-js.min.js"></script>
-<script src="js/cloud.js?v=24"></script>
+<script src="js/lisans.js?v=25"></script>
+<script src="js/app.js?v=25"></script>
+<script src="js/cloud.js?v=25"></script>
 </body>
 </html>

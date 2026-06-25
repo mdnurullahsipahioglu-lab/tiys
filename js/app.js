@@ -320,12 +320,15 @@
       </div>
       <div class="panel" id="cloudPanel" style="margin-top:14px;max-width:540px"></div>
       <div class="panel" id="cesitPanel" style="margin-top:14px;max-width:760px"></div>
+      <div class="panel" id="lisansPanel" style="margin-top:14px;max-width:540px"></div>
       <div class="panel" style="margin-top:14px;max-width:540px"><h3>ℹ️ Hakkında</h3>
         <div class="about-row"><b>Uygulama</b><span>TİYS — Tarım İşletme Yönetim Sistemi</span></div>
         <div class="about-row"><b>Sürüm</b><span>1.0.0</span></div>
         <div class="about-row"><b>Geliştiren</b><span>${a.gelistirici || "Rıfat Sipahioğlu"}</span></div>
         <div class="about-row"><b>İletişim</b><span><a href="mailto:${a.iletisim || "rsipahi@gmail.com"}" style="color:var(--blue)">${a.iletisim || "rsipahi@gmail.com"}</a></span></div>
         <div class="about-row"><b>Telif Hakkı</b><span>© 2026 ${a.gelistirici || "Rıfat Sipahioğlu"} · Tüm hakları saklıdır</span></div>
+        <p class="lead" style="font-size:12px;margin-top:10px;line-height:1.6">Bu yazılımın <b>tüm hakları Rıfat Sipahioğlu'na aittir.</b> İzinsiz çoğaltılamaz, dağıtılamaz veya satılamaz.</p>
+        <div style="display:flex;gap:16px;margin-top:6px;font-size:13px"><a href="gizlilik.html" target="_blank" style="color:var(--blue)">Gizlilik Politikası</a><a href="kosullar.html" target="_blank" style="color:var(--blue)">Kullanım Koşulları</a></div>
       </div>`;
     view.querySelector("#s_save").onclick = () => {
       const d = D.load();
@@ -503,15 +506,37 @@
     }
     renderCesitler();
 
+    renderLisans();
+    function renderLisans() {
+      const p = view.querySelector("#lisansPanel"); if (!p) return;
+      const d = window.Lisans ? Lisans.durum() : { tip: "sahip" };
+      let st;
+      if (d.tip === "sahip") st = '<span style="color:var(--green,#16a34a);font-weight:700">✓ Sahip erişimi (tam, ücretsiz)</span>';
+      else if (d.tip === "lisansli") st = '<span style="color:var(--green,#16a34a);font-weight:700">✓ Lisanslı</span> <span style="font-size:12px;opacity:.6">' + (d.anahtar || "") + '</span>';
+      else if (d.tip === "deneme") st = '<span style="color:var(--orange,#ea580c);font-weight:700">⏳ Deneme — ' + d.gunKalan + ' gün kaldı</span>';
+      else st = '<span style="color:var(--red,#dc2626);font-weight:700">Deneme süresi doldu</span>';
+      const lisanslı = (d.tip === "sahip" || d.tip === "lisansli");
+      p.innerHTML = '<h3>🔑 Lisans</h3><div class="about-row"><b>Durum</b><span>' + st + '</span></div>' +
+        (lisanslı ? '<p class="lead" style="font-size:12px;margin-top:8px">Tam sürüm etkin. Teşekkürler.</p>'
+          : '<p class="lead" style="font-size:12.5px;margin:8px 0">Tam sürüm için lisans anahtarınızı girin (Rıfat Sipahioğlu\'ndan):</p>' +
+            '<div style="display:flex;gap:8px"><input id="lp_key" placeholder="TIYS-XXXX-XXXX-XXXX" autocomplete="off" style="flex:1;padding:9px;border:1px solid var(--line,#d1d5db);border-radius:8px;text-transform:uppercase"><button class="btn primary" id="lp_btn">Etkinleştir</button></div><div id="lp_msg" style="font-size:12px;margin-top:6px"></div>');
+      if (!lisanslı) {
+        const go = () => { const r = Lisans.aktiveEt(p.querySelector("#lp_key").value); if (r.ok) { Forms.toast("Lisans etkinleştirildi ✓"); renderLisans(); FIYS.route(); } else { const m = p.querySelector("#lp_msg"); m.style.color = "var(--red,#dc2626)"; m.textContent = "⚠️ " + r.error; } };
+        p.querySelector("#lp_btn").onclick = go;
+        p.querySelector("#lp_key").addEventListener("keydown", e => { if (e.key === "Enter") go(); });
+      }
+    }
+
     function val(s) { return view.querySelector(s).value; }
   }
 
   // ---- Router ----
   function route() {
+    const view = document.getElementById("view");
+    if (window.Lisans && !Lisans.erisimVar()) { document.getElementById("pageTitle").textContent = "Lisans Gerekli"; paywallGoster(view); closeSidebar(); return; }
     const hash = location.hash.replace(/^#/, "") || "/dashboard";
     const r = routes[hash] || routes["/dashboard"];
     document.getElementById("pageTitle").textContent = r.title;
-    const view = document.getElementById("view");
     if (Dashboard && Dashboard.destroy) Dashboard.destroy();
     if (window.Reports && Reports.destroy) Reports.destroy();
     if (window.Weather && Weather.destroy) Weather.destroy();
@@ -522,13 +547,37 @@
       a.classList.toggle("active", on);
       if (on) { const g = a.closest(".group"); if (g) g.classList.add("open"); }
     });
+    const ld = window.Lisans && Lisans.durum(), lc = document.getElementById("lisChip");
+    if (lc && ld) { if (ld.tip === "deneme") { lc.style.display = ""; lc.textContent = "🔑 Deneme: " + ld.gunKalan + " gün"; } else lc.style.display = "none"; }
     closeSidebar();
     const main = document.querySelector(".main"); if (main) main.scrollTop = 0;
   }
 
+  // Deneme bitince / lisans yokken gösterilen kilit ekranı
+  function paywallGoster(view) {
+    view.innerHTML = `
+      <div class="panel" style="max-width:520px;margin:36px auto;text-align:center;padding:30px 24px">
+        <div style="font-size:46px">🌰</div>
+        <h2 style="margin:8px 0">Deneme süresi doldu</h2>
+        <p class="lead" style="margin-bottom:18px">TİYS'i kullanmaya devam etmek için <b>lisans anahtarınızı</b> girin.<br>Anahtarınız yoksa <b>Rıfat Sipahioğlu</b>'ndan satın alabilirsiniz.</p>
+        <input id="lis_key" placeholder="TIYS-XXXX-XXXX-XXXX" autocomplete="off" style="width:100%;padding:12px;border:1px solid var(--line,#d1d5db);border-radius:10px;font-size:16px;text-align:center;letter-spacing:1px;text-transform:uppercase;box-sizing:border-box">
+        <div id="lis_msg" style="min-height:20px;margin:10px 0;font-size:13px"></div>
+        <button class="btn primary" id="lis_btn" style="width:100%;padding:12px">🔓 Etkinleştir</button>
+        <p class="lead" style="font-size:12px;margin-top:16px;opacity:.7">İletişim / satın alma: rsipahi@gmail.com<br>© 2026 Rıfat Sipahioğlu — Tüm hakları saklıdır</p>
+      </div>`;
+    const inp = view.querySelector("#lis_key"), msg = view.querySelector("#lis_msg");
+    const dene = () => {
+      const r = Lisans.aktiveEt(inp.value);
+      if (r.ok) { Forms.toast(r.tip === "sahip" ? "Sahip erişimi açıldı ✓" : "Lisans etkinleştirildi ✓"); location.hash = "#/dashboard"; route(); }
+      else { msg.style.color = "var(--red,#dc2626)"; msg.textContent = "⚠️ " + r.error; }
+    };
+    view.querySelector("#lis_btn").onclick = dene;
+    inp.addEventListener("keydown", e => { if (e.key === "Enter") dene(); });
+  }
+
   function initNav() {
     document.querySelectorAll("#nav [data-toggle]").forEach(btn => btn.addEventListener("click", () => btn.closest(".group").classList.toggle("open")));
-    const d = new Date(2026, 5, 13), gun = ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"][d.getDay()];
+    const d = new Date(), gun = ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"][d.getDay()];
     document.getElementById("dateChip").textContent = `📅 ${D.dateTR(d)}  ${gun}`;
     const a = D.load().ayarlar; if (a.yonetici) document.getElementById("userName").textContent = a.yonetici;
   }
