@@ -100,12 +100,16 @@
   }
 
   // ---- Grup kiralama ekle/düzenle (alacak) — tarih aralığı modeli ----
-  function kiralamaForm(rec, presetMusteri) {
+  /// @param sonra  Kaydettikten sonra çağrılır. Takvimden açıldığında takvimi tazelemek
+  ///               için gerekli — `refresh()` yalnız İşçi sayfası açıkken iş görür.
+  /// @param onTarih Takvimden gelen gün (ISO): başlangıç ve bitiş bununla açılır.
+  function kiralamaForm(rec, presetMusteri, sonra, onTarih) {
     const yil = rec && rec.tarih ? yilOf(rec.tarih) : aktifYil();
     const grup = grupBuyuk();
+    const bas = onTarih || bugunISO();
     Forms.open({
       title: "Grup Kiralama", icon: "🧾",
-      record: rec || { tarih: bugunISO(), bitis: bugunISO(), musteri: presetMusteri || "", kisi: grup || "", yevmiye: D.yevmiyeFor(yil) },
+      record: rec || { tarih: bas, bitis: bas, musteri: presetMusteri || "", kisi: grup || "", yevmiye: D.yevmiyeFor(yil) },
       fields: [
         { key: "musteri", label: "Müşteri (grubu kiralayan)", type: "text", required: true, datalist: D.musteriList(), placeholder: "Ad Soyad" },
         { key: "tarih", label: "Başlangıç Tarihi", type: "date", required: true },
@@ -122,8 +126,9 @@
       onSave: data => {
         if (rec && rec.id) D.update("isciKiralamalar", rec.id, data); else D.add("isciKiralamalar", data);
         refresh();
+        if (typeof sonra === "function") sonra();
       },
-      onDelete: rec && rec.id ? id => { D.remove("isciKiralamalar", id); refresh(); } : null
+      onDelete: rec && rec.id ? id => { D.remove("isciKiralamalar", id); refresh(); if (typeof sonra === "function") sonra(); } : null
     });
   }
 
@@ -286,5 +291,8 @@
     ov.querySelector("[data-copy]").onclick = () => { try { navigator.clipboard.writeText(metin); Forms.toast("Ekstre kopyalandı ✓"); } catch (e) { Forms.toast("Kopyalanamadı"); } };
   }
 
-  global.Isci = { render };
+  /// Takvimden çağrılır: o güne kiralama kaydı aç (Kiralama Takvimi → güne tıkla).
+  function kiralamaAc(tarihISO, sonra) { kiralamaForm(null, "", sonra, tarihISO); }
+
+  global.Isci = { render, kiralamaAc };
 })(window);

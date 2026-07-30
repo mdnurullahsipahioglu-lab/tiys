@@ -14,6 +14,45 @@
   function dt(v) { return v ? D.dateTR(v) : "—"; }
   function dtt(v) { return v ? D.dateTimeTR(v) : "—"; }
 
+  // ---- Zaman aralığı: başlangıç/bitiş SAATİ ile birim zaman maliyeti ----
+  // Rıfat Bey'in isteği: "tarih bilgisi olan her data girişi başlama ve bitiş zamanı
+  // saati ile birlikte girilebilmeli ki birim zamandaki maliyet hesaplansın."
+  // Tasarım: mevcut `tarih` alanı KALIYOR (eski kayıtlar, yıl filtresi ve sıralama ona
+  // bağlı); yanına İSTEĞE BAĞLI `baslangic`/`bitis` datetime alanları ekleniyor. İkisi de
+  // doluysa süre ve ₺/saat hesaplanıyor. Böylece eski kayıtlar bozulmuyor.
+  function sureSaat(bas, bit) {
+    if (!bas || !bit) return null;
+    const d1 = new Date(bas), d2 = new Date(bit);
+    if (isNaN(d1.getTime()) || isNaN(d2.getTime())) return null;
+    const s = (d2 - d1) / 3600000;
+    return s > 0 ? s : null;
+  }
+  function sureMetni(saat) {
+    if (saat == null) return "—";
+    const s = Math.floor(saat), dk = Math.round((saat - s) * 60);
+    return (s ? s + " sa " : "") + (dk ? dk + " dk" : (s ? "" : "0 dk"));
+  }
+  /// Form alanları: başlangıç + bitiş (saatli). `calc` alanı canlı süre/birim maliyet yazar.
+  function zamanAraligiFields(tutarKey) {
+    return [
+      { key: "baslangic", label: "Başlangıç (tarih + saat)", type: "datetime", hint: "Birim zaman maliyeti için — boş bırakabilirsin" },
+      { key: "bitis", label: "Bitiş (tarih + saat)", type: "datetime", calc: true }
+    ];
+  }
+  /// crud({ computeShow }) için: süre ve ₺/saat özetini döndürür.
+  function zamanCalc(d, tutarKey) {
+    const s = sureSaat(d.baslangic, d.bitis);
+    if (s == null) return { bitis: "" };
+    const tutar = Number(d[tutarKey || "tutar"] || 0);
+    const birim = tutar > 0 ? "  ·  " + D.money(tutar / s) + " / saat" : "";
+    return { bitis: "⏱ " + sureMetni(s) + birim };
+  }
+  /// Kaydederken süreyi de yaz (raporlarda tekrar hesaplamamak için).
+  function zamanSave(d) {
+    const s = sureSaat(d.baslangic, d.bitis);
+    return s == null ? {} : { sureSaat: Math.round(s * 100) / 100 };
+  }
+
   // ---- Genel CRUD görünümü ----
   function crud(opts) {
     return function (view) {
@@ -82,6 +121,9 @@
       { key: "tarih", label: "Tarih", type: "date", required: true },
       { key: "tutar", label: "Tutar (₺)", type: "money", required: true, placeholder: "0" },
       { key: "tarlaId", label: "Tarla (varsa)", type: "select", options: tarlaOptions() },
+      // Gelirde de saatli aralık: birim zamanda kazanç (₺/saat) çıksın.
+      { key: "baslangic", label: "Başlangıç (tarih + saat)", type: "datetime", hint: "İsteğe bağlı — ₺/saat hesabı için" },
+      { key: "bitis", label: "Bitiş (tarih + saat)", type: "datetime", calc: true },
       { key: "aciklama", label: "Açıklama", type: "textarea", full: true, placeholder: "Not / detay" }
     ];
   }
@@ -91,6 +133,8 @@
       : kategori === "yakit" ? { key: "tur", label: "Yakıt", type: "select", required: true, options: ["Benzin", "Motorin", "Yağ"] }
       : { key: "tur", label: "Ekipman", type: "select", required: true, options: ["Misina", "Zincir", "Koruyucu ekipman", "El aletleri", "Diğer"] };
     const f = [turField, { key: "tarih", label: "Tarih", type: "date", required: true }, { key: "tutar", label: "Tutar (₺)", type: "money", required: true }];
+    // Başlangıç/bitiş SAATİ — işçilik gibi kalemlerde birim zaman maliyeti için.
+    zamanAraligiFields("tutar").forEach(x => f.push(x));
     if (kategori === "genel") f.push({ key: "altKategori", label: "Dağılım Kategorisi", type: "select", options: ALT, hint: "Dashboard grafiği için" });
     f.push({ key: "tarlaId", label: "Tarla (hangi tarlaya?)", type: "select", options: tarlaOptions(), hint: "Boş bırakırsan genel/tüm işletme gideri sayılır" });
     f.push({ key: "aciklama", label: "Açıklama", type: "textarea", full: true });
@@ -113,6 +157,9 @@
   const hasatFields = () => [
     { key: "tarlaId", label: "Tarla", type: "select", required: true, options: D.coll("tarlalar").map(t => ({ v: t.id, l: t.ad })) },
     { key: "tarih", label: "Hasat Tarihi", type: "date", required: true },
+    // Hasat da bir işlem: kaç saatte toplandığı verimlilik için önemli.
+    { key: "baslangic", label: "Başlangıç (tarih + saat)", type: "datetime", hint: "İsteğe bağlı — süre/verim hesabı için" },
+    { key: "bitis", label: "Bitiş (tarih + saat)", type: "datetime" },
     { key: "cuval", label: "Çuval Sayısı", type: "number", hint: "Bu tarladan toplanan çuval adedi" },
     { key: "yasUrun", label: "Toplanan Yaş Ürün (kg)", type: "number" },
     { key: "kuruUrun", label: "Kurutma Sonrası (kg)", type: "number", hint: "Kuruyunca gir — sonradan da girebilirsin" },
@@ -124,9 +171,9 @@
   const routes = {
     "/dashboard": { title: "Dashboard", render: v => Dashboard.render(v) },
 
-    "/gelir-hasat": { title: "Hasat Geliri", render: crud({ coll: "gelirler", title: "Hasat Geliri", icon: "🌾", addLabel: "Hasat Geliri Ekle", totalLabel: "Toplam Hasat Geliri", defaults: { tur: "hasat" }, filter: g => g.tur === "hasat" && D.yilUyar(g.tarih), fields: gelirFields, total: r => r.reduce((a, x) => a + (x.tutar || 0), 0), cols: [{ h: "Tarih", v: r => dt(r.tarih) }, { h: "Tarla", v: r => (D.coll("tarlalar").find(t => t.id === r.tarlaId) || {}).ad || "—" }, { h: "Açıklama", v: r => r.aciklama || "—" }, { h: "Tutar", v: r => D.money(r.tutar) }, { h: "USD", v: r => Doviz.usdStr(r.tutar, r.tarih) }] }) },
+    "/gelir-hasat": { title: "Hasat Geliri", render: crud({ coll: "gelirler", title: "Hasat Geliri", icon: "🌾", addLabel: "Hasat Geliri Ekle", totalLabel: "Toplam Hasat Geliri", defaults: { tur: "hasat" }, filter: g => g.tur === "hasat" && D.yilUyar(g.tarih), fields: gelirFields, compute: d => zamanCalc(d, "tutar"), computeSave: zamanSave,  total: r => r.reduce((a, x) => a + (x.tutar || 0), 0), cols: [{ h: "Tarih", v: r => dt(r.tarih) }, { h: "Tarla", v: r => (D.coll("tarlalar").find(t => t.id === r.tarlaId) || {}).ad || "—" }, { h: "Açıklama", v: r => r.aciklama || "—" }, { h: "Süre", v: r => r.sureSaat ? sureMetni(r.sureSaat) : "—" }, { h: "₺/saat", v: r => (r.sureSaat && r.tutar) ? D.money(r.tutar / r.sureSaat) : "—" }, { h: "Tutar", v: r => D.money(r.tutar) }, { h: "USD", v: r => Doviz.usdStr(r.tutar, r.tarih) }] }) },
     "/gelir-kiralama": { title: "İşçi Kiralama Geliri", render: crud({ coll: "gelirler", title: "İşçi Kiralama Geliri", icon: "👷", addLabel: "Tahsilat Ekle", lead: "Müşterilerden alınan işçilik ödemeleri — detaylı borç takibi: İşçi Kiralama sayfası", totalLabel: "Tahsil Edilen", defaults: { tur: "isciKiralama" }, filter: g => g.tur === "isciKiralama" && D.yilUyar(g.tarih), fields: () => [{ key: "tarih", label: "Tarih", type: "date", required: true }, { key: "musteri", label: "Müşteri", type: "text", datalist: D.musteriList(), placeholder: "Ad Soyad" }, { key: "tutar", label: "Alınan Tutar (₺)", type: "money", required: true }, { key: "aciklama", label: "Not", type: "text", full: true, placeholder: "nakit / havale" }], total: r => r.reduce((a, x) => a + (x.tutar || 0), 0), cols: [{ h: "Tarih", v: r => dt(r.tarih) }, { h: "Müşteri", v: r => r.musteri || "—" }, { h: "Açıklama", v: r => r.aciklama || "—" }, { h: "Tutar", v: r => D.money(r.tutar) }, { h: "USD", v: r => Doviz.usdStr(r.tutar, r.tarih) }] }) },
-    "/gelir-kira": { title: "Ev Kira Geliri", render: crud({ coll: "gelirler", title: "Ev Kira Geliri", icon: "🏠", addLabel: "Kira Geliri Ekle", totalLabel: "Toplam", defaults: { tur: "evKira" }, filter: g => g.tur === "evKira" && D.yilUyar(g.tarih), fields: gelirFields, total: r => r.reduce((a, x) => a + (x.tutar || 0), 0), cols: [{ h: "Tarih", v: r => dt(r.tarih) }, { h: "Açıklama", v: r => r.aciklama || "—" }, { h: "Tutar", v: r => D.money(r.tutar) }, { h: "USD", v: r => Doviz.usdStr(r.tutar, r.tarih) }] }) },
+    "/gelir-kira": { title: "Ev Kira Geliri", render: crud({ coll: "gelirler", title: "Ev Kira Geliri", icon: "🏠", addLabel: "Kira Geliri Ekle", totalLabel: "Toplam", defaults: { tur: "evKira" }, filter: g => g.tur === "evKira" && D.yilUyar(g.tarih), fields: gelirFields, compute: d => zamanCalc(d, "tutar"), computeSave: zamanSave,  total: r => r.reduce((a, x) => a + (x.tutar || 0), 0), cols: [{ h: "Tarih", v: r => dt(r.tarih) }, { h: "Açıklama", v: r => r.aciklama || "—" }, { h: "Süre", v: r => r.sureSaat ? sureMetni(r.sureSaat) : "—" }, { h: "₺/saat", v: r => (r.sureSaat && r.tutar) ? D.money(r.tutar / r.sureSaat) : "—" }, { h: "Tutar", v: r => D.money(r.tutar) }, { h: "USD", v: r => Doviz.usdStr(r.tutar, r.tarih) }] }) },
 
     "/gider-genel": { title: "Genel Giderler", render: giderRoute("genel", "📋") },
     "/gider-makine": { title: "Makine Giderleri", render: giderRoute("makine", "⚙️") },
@@ -156,7 +203,7 @@
 
   function giderRoute(kategori, ico) {
     const titles = { genel: "Genel Giderler", makine: "Makine Giderleri", yakit: "Yakıt Giderleri", ekipman: "Ekipman Giderleri" };
-    return crud({ coll: "giderler", title: titles[kategori], icon: ico, addLabel: titles[kategori] + " Ekle", totalLabel: "Toplam", defaults: { kategori, altKategori: kategori === "genel" ? "iscilik" : kategori }, filter: g => g.kategori === kategori && D.yilUyar(g.tarih), fields: () => giderFields(kategori), total: r => r.reduce((a, x) => a + (x.tutar || 0), 0), cols: [{ h: "Tarih", v: r => dt(r.tarih) }, { h: "Tür", v: r => r.tur }, { h: "Tarla", v: r => (D.coll("tarlalar").find(t => t.id === r.tarlaId) || {}).ad || "— genel —" }, { h: "Açıklama", v: r => r.aciklama || "—" }, { h: "Tutar", v: r => D.money(r.tutar) }, { h: "USD", v: r => Doviz.usdStr(r.tutar, r.tarih) }] });
+    return crud({ coll: "giderler", title: titles[kategori], icon: ico, addLabel: titles[kategori] + " Ekle", totalLabel: "Toplam", defaults: { kategori, altKategori: kategori === "genel" ? "iscilik" : kategori }, filter: g => g.kategori === kategori && D.yilUyar(g.tarih), fields: () => giderFields(kategori), compute: d => zamanCalc(d, "tutar"), computeSave: zamanSave, total: r => r.reduce((a, x) => a + (x.tutar || 0), 0), cols: [{ h: "Tarih", v: r => dt(r.tarih) }, { h: "Tür", v: r => r.tur }, { h: "Tarla", v: r => (D.coll("tarlalar").find(t => t.id === r.tarlaId) || {}).ad || "— genel —" }, { h: "Açıklama", v: r => r.aciklama || "—" }, { h: "Süre", v: r => r.sureSaat ? sureMetni(r.sureSaat) : "—" }, { h: "₺/saat", v: r => (r.sureSaat && r.tutar) ? D.money(r.tutar / r.sureSaat) : "—" }, { h: "Tutar", v: r => D.money(r.tutar) }, { h: "USD", v: r => Doviz.usdStr(r.tutar, r.tarih) }] });
   }
 
   // ---- Tarla bazlı gider özeti (pivot: tarla × kategori) ----
