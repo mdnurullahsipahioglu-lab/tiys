@@ -449,6 +449,7 @@
         </div>
       </div>
       <div class="panel" id="yedekPanel" style="margin-top:14px;max-width:540px"></div>
+      <div class="panel" id="bulutSaglikPanel" style="margin-top:14px;max-width:540px"></div>
       <div class="panel" id="cloudPanel" style="margin-top:14px;max-width:540px"></div>
       <div class="panel" id="cesitPanel" style="margin-top:14px;max-width:760px"></div>
       <div class="panel" id="lisansPanel" style="margin-top:14px;max-width:540px"></div>
@@ -624,6 +625,57 @@
     }
     renderCloud();
     renderYedekler();
+    renderBulutSaglik();
+
+    // Bulut sağlığı + ikinci sağlayıcı.
+    // 01–04.08.2026'da Pantry günlerce çöktü ve kullanıcı HİÇBİR uyarı görmedi —
+    // "senkron çalışıyor" sanıyordu. Artık son temas gösteriliyor, uzun sürerse uyarı.
+    function renderBulutSaglik() {
+      const p = view.querySelector("#bulutSaglikPanel"); if (!p || typeof Cloud === "undefined") return;
+      const gun = Cloud.temasGunFarki ? Cloud.temasGunFarki() : null;
+      const temas = Cloud.sonTemas ? Cloud.sonTemas() : null;
+      const ozel = Cloud.ozelUrl ? Cloud.ozelUrl() : "";
+      let uyari = "";
+      if (gun === null) {
+        uyari = `<div style="background:rgba(148,163,184,.12);border:1px solid #94a3b8;border-radius:8px;padding:9px 11px;font-size:12.5px">Buluta henüz hiç bağlanılmadı.</div>`;
+      } else if (gun >= 3) {
+        uyari = `<div style="background:rgba(220,38,38,.10);border:1px solid #dc2626;border-radius:8px;padding:9px 11px;font-size:12.5px;color:#b91c1c">
+          ⚠ <b>${gun} gündür buluta ulaşılamıyor.</b> Cihazlar arası eşitleme durmuş olabilir — verilerin bu cihazda güvende, ama yedek almanı öneririm.</div>`;
+      } else {
+        uyari = `<div style="background:rgba(34,197,94,.10);border:1px solid #16a34a;border-radius:8px;padding:9px 11px;font-size:12.5px;color:#15803d">
+          ✓ Bulutla son bağlantı: ${new Date(temas).toLocaleString("tr-TR")}</div>`;
+      }
+      p.innerHTML = `<h3>☁️ Bulut Sağlığı</h3>
+        ${uyari}
+        <div style="margin-top:14px">
+          <div style="font-weight:600;font-size:13px;margin-bottom:4px">Yedek bulut adresi (isteğe bağlı)</div>
+          <p class="lead" style="margin:0 0 8px;font-size:12.5px">Tek bir ücretsiz servise bağlı kalmamak için kendi adresini ekleyebilirsin. Veri buraya da <b>şifreli</b> yazılır; biri çökerse öbürü çalışır. Adreste <code>{K}</code> yaz — program oraya kayıt anahtarını koyar.</p>
+          <input id="bs_url" class="input" style="width:100%;font-family:monospace;font-size:12px" placeholder="https://ornek.workers.dev/tiys/{K}" value="${(ozel || "").replace(/"/g, "&quot;")}">
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button class="btn primary" id="bs_kaydet">Kaydet</button>
+            <button class="btn ghost" id="bs_test">Bağlantıyı Test Et</button>
+          </div>
+          <div id="bs_msg" class="lead" style="margin-top:8px;font-size:12.5px"></div>
+        </div>`;
+      const msg = t => { const m = p.querySelector("#bs_msg"); if (m) m.textContent = t; };
+      p.querySelector("#bs_kaydet").onclick = () => {
+        const u = p.querySelector("#bs_url").value.trim();
+        if (u && !/^https?:\/\//i.test(u)) { msg("Adres http:// veya https:// ile başlamalı."); return; }
+        if (u && u.indexOf("{K}") < 0) { msg("Adreste {K} olmalı — kayıt anahtarı oraya konur."); return; }
+        Cloud.ozelUrlAyarla(u);
+        Forms.toast(u ? "Yedek bulut adresi kaydedildi ✓" : "Yedek bulut adresi kaldırıldı");
+        renderBulutSaglik();
+      };
+      p.querySelector("#bs_test").onclick = async () => {
+        msg("Deneniyor…");
+        const sonuc = [];
+        for (const s of (Cloud.saglayicilar ? Cloud.saglayicilar() : [])) {
+          try { await s.oku("tiys-baglanti-testi"); sonuc.push(s.ad + ": ✓ ulaşılabilir"); }
+          catch (e) { sonuc.push(s.ad + ": ✕ " + String((e && e.message) || e).slice(0, 60)); }
+        }
+        msg(sonuc.join(" · ") || "Sağlayıcı yok");
+      };
+    }
 
     // Otomatik yedekler — buluttan BAĞIMSIZ güvenlik ağı.
     // 01.08.2026: Pantry tamamen çöktü, verinin tek erişilebilir kopyası tek cihazdaydı.

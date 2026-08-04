@@ -23,6 +23,14 @@
   const SON_BULUT_KEY = "tiys_son_bulut";
   function bekleyenYaz(v) { try { if (v) localStorage.setItem(BEKLEYEN_KEY, "1"); else localStorage.removeItem(BEKLEYEN_KEY); } catch (e) {} }
   function sonBulutYaz(ts) { try { if (ts) localStorage.setItem(SON_BULUT_KEY, ts); } catch (e) {} }
+  // Buluta EN SON ne zaman gerçekten ulaşabildik? Bayatlık uyarısı bunu kullanıyor:
+  // Pantry günlerce çöktüğünde kullanıcı hiçbir uyarı görmüyordu ve "senkron var"
+  // sanıyordu. Artık uzun süre ulaşılamazsa Ayarlar'da kırmızı uyarı çıkıyor.
+  const SON_TEMAS_KEY = "tiys_son_bulut_temas";
+  function temasIsaretle() { try { localStorage.setItem(SON_TEMAS_KEY, new Date().toISOString()); } catch (e) {} }
+  function sonTemas() { try { return localStorage.getItem(SON_TEMAS_KEY) || null; } catch (e) { return null; } }
+  function temasGunFarki() { const t = sonTemas(); if (!t) return null;
+    try { return Math.floor((Date.now() - new Date(t).getTime()) / 86400000); } catch (e) { return null; } }
   let pullEdiyor = false;       // pull import ederken tiys:save tetikleniyor → geri-push döngüsünü engelle
   let durum = "kapali";         // kapali | bagli | senkron | cevrimdisi | hata
   let pollTimer = null, dinleyiciKuruldu = false;
@@ -98,6 +106,72 @@
     return await res.json();
   }
 
+  // ═══ ÇOKLU SAĞLAYICI ═══
+  //
+  // 01–04.08.2026: Pantry günlerce çöktü. Tek servise bağlı olmak kabul edilemez.
+  // Artık yazma TÜM açık sağlayıcılara yapılır (aynalama), okuma ilk cevap verenden.
+  // Biri çökse öbürü çalışır; ikisi de çökse yerel yedekler var (bkz. db.js otoYedekAl).
+  //
+  // ⚠️ İKİNCİ SAĞLAYICI NEDEN GÖMÜLÜ DEĞİL: eşleştirme-kodu modeli, adresin KODDAN
+  // türetilebilmesini gerektiriyor (sepet adı = kodun hash'i). Hesap istemeyen ücretsiz
+  // servislerin hiçbiri müşteri-seçili anahtara izin vermiyor (kvdb e-posta istiyor,
+  // jsonblob/npoint/jsonbin kimliği SUNUCU atıyor, jsonblob ayrıca 24 SAATTE siliniyor).
+  // Bu yüzden ikinci yuva KULLANICI TARAFINDAN doldurulur: kendi uç noktasının URL'sini
+  // Ayarlar'a yapıştırır ({K} yerine kod hash'i konur). Cloudflare Worker, Supabase,
+  // kendi sunucusu — fark etmez; GET ve PUT/POST desteklemesi yeterli.
+  const OZEL_URL_KEY = "tiys_ozel_bulut";
+  function ozelUrl() { try { return (localStorage.getItem(OZEL_URL_KEY) || "").trim(); } catch (e) { return ""; } }
+  function ozelUrlAyarla(u) {
+    try {
+      u = String(u || "").trim();
+      if (u) localStorage.setItem(OZEL_URL_KEY, u); else localStorage.removeItem(OZEL_URL_KEY);
+      emit(); return { ok: true };
+    } catch (e) { return { error: "Kaydedilemedi" }; }
+  }
+  function _ozelAdres(anahtar) { return ozelUrl().replace(/\{K\}/g, encodeURIComponent(anahtar)); }
+  async function ozelYaz(anahtar, payload) {
+    const res = await fetch(_ozelAdres(anahtar), {
+      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error(_httpMesaj(res.status, "yaz"));
+    return true;
+  }
+  async function ozelOku(anahtar) {
+    const res = await fetch(_ozelAdres(anahtar), { method: "GET", headers: { "Accept": "application/json" } });
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(_httpMesaj(res.status, "oku"));
+    const t = await res.text();
+    if (!t) return null;
+    try { return JSON.parse(t); } catch (e) { return null; }
+  }
+
+  function saglayicilar() {
+    const l = [{ ad: "Pantry", yaz: pantryYaz, oku: pantryOku }];
+    if (ozelUrl()) l.push({ ad: "Kendi sunucun", yaz: ozelYaz, oku: ozelOku });
+    return l;
+  }
+  /// Tüm sağlayıcılara yaz. EN AZ BİRİ başarılıysa başarılı sayılır.
+  async function coklaYaz(anahtar, payload) {
+    const s = saglayicilar(), basarili = [], hatalar = [];
+    for (const p of s) {
+      try { await p.yaz(anahtar, payload); basarili.push(p.ad); }
+      catch (e) { hatalar.push(p.ad + ": " + ((e && e.message) || e)); }
+    }
+    if (!basarili.length) throw new Error(hatalar[0] || "Hiçbir bulut sağlayıcısına yazılamadı");
+    temasIsaretle();
+    return { basarili, hatalar };
+  }
+  /// İlk cevap verenden oku; hepsi patlarsa son hatayı fırlat.
+  async function coklaOku(anahtar) {
+    const s = saglayicilar(); let sonHata = null;
+    for (const p of s) {
+      try { const r = await p.oku(anahtar); temasIsaretle(); if (r) return r; }
+      catch (e) { sonHata = e; }
+    }
+    if (sonHata) throw sonHata;
+    return null;
+  }
+
   async function restore() {
     if (!configured() || !libReady()) { setDurum("kapali"); return; }
     try { kod = localStorage.getItem(KOD_KEY) || null; } catch (e) { kod = null; }
@@ -160,7 +234,7 @@
     // veya bozulmuş yerel veri, tek push'la ortak bulut yedeğini siliyordu.
     if (payload.sayi === 0) {
       try {
-        const mevcutRow = await pantryOku(basketAdi(kod));
+        const mevcutRow = await coklaOku(basketAdi(kod));
         if (mevcutRow && (mevcutRow.sayi || 0) > 0) {
           yerelDegisti = false; bekleyenYaz(false); setDurum("bagli");
           return { ok: true, atlandi: true };
@@ -168,7 +242,7 @@
       } catch (e) { /* okunamadıysa normal akış */ }
     }
     try {
-      await pantryYaz(basketAdi(kod), payload);
+      await coklaYaz(basketAdi(kod), payload);
       sonBilinenBulut = payload.guncelleme; sonBulutYaz(payload.guncelleme);
       yerelDegisti = false; bekleyenYaz(false);
       lastSync = new Date(); setDurum("bagli"); return { ok: true };
@@ -181,7 +255,7 @@
     if (!configured() || !kod) return { error: "Eşleştirilmedi" };
     if (yerelDegisti) return { ok: true, beklemede: true };
     let row;
-    try { row = await pantryOku(basketAdi(kod)); }
+    try { row = await coklaOku(basketAdi(kod)); }
     catch (e) { setDurum("cevrimdisi"); return { error: _hataMesaji(e) }; }
     if (!row) return { ok: true, vardi: false };
     // şifreli (enc:1) → çöz; eski düz kayıt (veri) → olduğu gibi (geriye uyumlu)
@@ -229,6 +303,7 @@
   }
   function baglantiKes() { clearInterval(pollTimer); pollTimer = null; }
 
-  global.Cloud = { configured, libReady, status, restore, kodOlustur, kodGir, kopar, push, pull, kayitSayisi: function () { try { return kayitSayisi(JSON.parse(DB.exportJSON())); } catch (e) { return 0; } } };
+  global.Cloud = { configured, libReady, status, restore, kodOlustur, kodGir, kopar, push, pull,
+    ozelUrl, ozelUrlAyarla, saglayicilar, sonTemas, temasGunFarki, kayitSayisi: function () { try { return kayitSayisi(JSON.parse(DB.exportJSON())); } catch (e) { return 0; } } };
   if (document.readyState !== "loading") restore(); else global.addEventListener("DOMContentLoaded", restore);
 })(window);
