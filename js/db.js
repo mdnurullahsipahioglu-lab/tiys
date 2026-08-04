@@ -88,7 +88,82 @@
     const s = JSON.stringify(_data);
     try { localStorage.setItem(KEY, s); } catch (e) {}
     if (dosyaModu()) { try { global.tiysFS.write(s); } catch (e) {} }
+    // Cihaz-yerel otomatik yedek (buluttan BAĞIMSIZ). 01.08.2026'da Pantry tamamen
+    // çöktü ve verinin tek erişilebilir kopyası tek bir cihazda kalmıştı.
+    try { if (Date.now() - _sonYedek > 300000) { _sonYedek = Date.now(); otoYedekAl(); } } catch (e) {}
     try { global.dispatchEvent(new CustomEvent("tiys:save")); } catch (e) {}
+  }
+
+  // ---- Otomatik yerel yedek (sıkıştırılmış + gün aralıklı) -------------------
+  //
+  // Neden sıkıştırma: veri büyüdükçe ham yedekler localStorage kotasını doldurup
+  // ASIL KAYDIN yazılmasını engelliyor (Asistia'da tam olarak bu yaşandı).
+  // Neden gün aralıklı: "son N yedek" hepsi son yarım saate ait olur, işe yaramaz;
+  // asıl ihtiyaç "üç gün önceki hâle dön".
+  const YEDEK_KEY = "tiys_oto_yedek";
+  let _sonYedek = 0;
+  function _b64e(buf) {
+    let s = ""; const p = 0x8000;
+    for (let i = 0; i < buf.length; i += p) s += String.fromCharCode.apply(null, buf.subarray(i, i + p));
+    return btoa(s);
+  }
+  function _b64d(b64) {
+    const bin = atob(b64), buf = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+    return buf;
+  }
+  async function _sikistir(s) {
+    if (typeof CompressionStream === "undefined") return null;
+    const ak = new Blob([s]).stream().pipeThrough(new CompressionStream("gzip"));
+    return _b64e(new Uint8Array(await new Response(ak).arrayBuffer()));
+  }
+  async function _ac(b64) {
+    const ak = new Blob([_b64d(b64)]).stream().pipeThrough(new DecompressionStream("gzip"));
+    return await new Response(ak).text();
+  }
+  function _yedekEle(arr) {
+    const s = arr.slice().filter(Boolean).sort((a, b) => (a.ts || 0) - (b.ts || 0));
+    const tut = new Set();
+    s.slice(-2).forEach(y => tut.add(y.ts));                       // en yeni 2
+    const gun = new Map();
+    s.forEach(y => { try { gun.set(new Date(y.ts).toDateString(), y.ts); } catch (e) {} });
+    gun.forEach(ts => tut.add(ts));                                // her günün en yenisi
+    let k = s.filter(y => tut.has(y.ts));
+    while (k.length > 8) k.shift();
+    return k;
+  }
+  async function otoYedekAl() {
+    try {
+      const s = localStorage.getItem(KEY);
+      if (!s || s.length < 40) return;
+      let arr = [];
+      try { arr = JSON.parse(localStorage.getItem(YEDEK_KEY) || "[]"); } catch (e) { arr = []; }
+      if (!Array.isArray(arr)) arr = [];
+      const son = arr[arr.length - 1];
+      if (son && son.boyut === s.length) return;                   // değişmemiş
+      const z = await _sikistir(s);
+      const kayit = { ts: Date.now(), tarih: new Date().toLocaleString("tr-TR"), boyut: s.length };
+      if (z) kayit.z = z; else kayit.veri = s;
+      arr.push(kayit);
+      arr = _yedekEle(arr);
+      const boy = y => (y.z || y.veri || "").length;
+      let top = arr.reduce((a, y) => a + boy(y), 0);
+      while (arr.length > 2 && top > 600000) { top -= boy(arr[0]); arr.shift(); }
+      for (let d = 0; d < 10; d++) {
+        try { localStorage.setItem(YEDEK_KEY, JSON.stringify(arr)); break; }
+        catch (e) { if (arr.length > 1) arr.shift(); else break; }
+      }
+    } catch (e) { /* yedek ana akışı asla bozmasın */ }
+  }
+  function yedekListesi() {
+    let arr = [];
+    try { arr = JSON.parse(localStorage.getItem(YEDEK_KEY) || "[]"); } catch (e) { arr = []; }
+    return (Array.isArray(arr) ? arr : []).slice().reverse();
+  }
+  async function yedekMetni(ts) {
+    const y = yedekListesi().find(x => x && x.ts === ts);
+    if (!y) return null;
+    return y.z ? await _ac(y.z) : (y.veri || null);
   }
   function reset() { _data = seed(); save(); return _data; }
 
@@ -380,6 +455,7 @@
     toplamGelir, toplamGider, netKar, toplamDekar,
     giderDagilimi, gelirDagilimi, aylikTrend, tarlaVerimSirasi,
     exportJSON, importJSON,
+    otoYedekAl, yedekListesi, yedekMetni,
     URUNLER, urun, urunFiyat, setUrunFiyat, sabitFiyat, setSabitFiyat, yilDeger, yillar, aktifYil, setAktifYil, yilUyar, aktifUrunler, urunOptions,
     yevmiyeFor, setYevmiye, tahsilatlar, musteriList, musteriOzet
   };

@@ -57,11 +57,36 @@
   }
 
   // ---- Pantry HTTP (fetch + CORS) ----
+  //
+  // 01.08.2026: Pantry TAMAMEN çöktü (ana sayfası dahil her istek 503). Kullanıcı
+  // ekranda yalnız "oku HTTP 503" görüyordu — bundan bir şey anlaşılmıyor, üstelik
+  // "verim gitti mi?" korkusu yaratıyor. Artık teknik kod yerine ne olduğunu ve
+  // verinin güvende olduğunu söylüyoruz.
+  // Ağ tamamen kopuk / CORS engelli / servis cevapsız → tarayıcı yalnız "Failed to fetch"
+  // der, HTTP kodu bile gelmez. Kullanıcıya bunu göstermek anlamsız ve korkutucu.
+  function _hataMesaji(e) {
+    var m = String((e && e.message) || e || "");
+    if (/failed to fetch|networkerror|load failed|typeerror/i.test(m))
+      return "Buluta ulaşılamıyor (internet yok ya da servis geçici olarak kapalı). Verilerin bu cihazda güvende.";
+    return m || "Bilinmeyen hata";
+  }
+
+  function _httpMesaj(kod, islem) {
+    if (kod === 503 || kod === 502 || kod === 504)
+      return "Bulut servisi şu an yanıt vermiyor (geçici arıza). Verilerin bu cihazda güvende — daha sonra kendiliğinden eşitlenecek.";
+    if (kod === 429)
+      return "Bulut servisi çok yoğun, biraz sonra tekrar denenecek. Verilerin bu cihazda güvende.";
+    if (kod === 401 || kod === 403)
+      return "Bulut erişimi reddedildi. Eşleştirme kodunu kontrol et.";
+    if (kod >= 500)
+      return "Bulut servisinde sorun var (" + kod + "). Verilerin bu cihazda güvende.";
+    return (islem === "yaz" ? "Buluta yazılamadı" : "Buluttan okunamadı") + " (" + kod + "). Verilerin bu cihazda güvende.";
+  }
   async function pantryYaz(basket, payload) {   // POST = sepeti tamamen değiştir
     const res = await fetch(PANTRY_BASE + "/" + PANTRY_ID + "/basket/" + encodeURIComponent(basket), {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
     });
-    if (!res.ok) throw new Error("yaz HTTP " + res.status);
+    if (!res.ok) throw new Error(_httpMesaj(res.status, "yaz"));
     return true;
   }
   async function pantryOku(basket) {            // GET; sepet yoksa 400 → null
@@ -69,7 +94,7 @@
       method: "GET", headers: { "Accept": "application/json" }
     });
     if (res.status === 400 || res.status === 404) return null;
-    if (!res.ok) throw new Error("oku HTTP " + res.status);
+    if (!res.ok) throw new Error(_httpMesaj(res.status, "oku"));
     return await res.json();
   }
 
@@ -130,7 +155,7 @@
     try {
       const veriStr = DB.exportJSON();   // veri ŞİFRELİ (c); guncelleme+sayi düz kalır (damga/sayaç hassas değil, korumalar şifre çözmeden çalışır)
       payload = { enc: 1, guncelleme: new Date().toISOString(), sayi: kayitSayisi(JSON.parse(veriStr)), c: sifrele(veriStr, kod) };
-    } catch (e) { setDurum("hata"); return { error: "veri okunamadı" }; }
+    } catch (e) { setDurum("hata"); return { error: "Buluttaki veri okunamadı (bozuk ya da erişilemiyor). Verilerin bu cihazda güvende." }; }
     // Boş yerel, DOLU bulutu ezemez (pull'daki korumanın simetriği): sıfırlama
     // veya bozulmuş yerel veri, tek push'la ortak bulut yedeğini siliyordu.
     if (payload.sayi === 0) {
@@ -147,7 +172,7 @@
       sonBilinenBulut = payload.guncelleme; sonBulutYaz(payload.guncelleme);
       yerelDegisti = false; bekleyenYaz(false);
       lastSync = new Date(); setDurum("bagli"); return { ok: true };
-    } catch (e) { setDurum("cevrimdisi"); return { error: String(e.message || e) }; }
+    } catch (e) { setDurum("cevrimdisi"); return { error: _hataMesaji(e) }; }
   }
 
   // Bulut → yerel — GÜVENLİ: boş bulut dolu yereli silmez; sadece daha YENİ bulutu alır;
@@ -157,7 +182,7 @@
     if (yerelDegisti) return { ok: true, beklemede: true };
     let row;
     try { row = await pantryOku(basketAdi(kod)); }
-    catch (e) { setDurum("cevrimdisi"); return { error: String(e.message || e) }; }
+    catch (e) { setDurum("cevrimdisi"); return { error: _hataMesaji(e) }; }
     if (!row) return { ok: true, vardi: false };
     // şifreli (enc:1) → çöz; eski düz kayıt (veri) → olduğu gibi (geriye uyumlu)
     let veriStr = null;

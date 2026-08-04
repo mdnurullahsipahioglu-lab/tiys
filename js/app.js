@@ -448,6 +448,7 @@
           <p class="lead" style="margin-top:14px">🔒 Tüm veri yalnızca bu cihazda saklanır.${(window.tiysFS && window.tiysFS.yol) ? ' <b>Masaüstü:</b> verileriniz <code style="font-size:11px">' + String(window.tiysFS.yol()).replace(/</g, "&lt;") + '</code> dosyasında kalıcı tutulur — programı güncellemek/yeniden kurmak verilerinizi SİLMEZ.' : ''}</p>
         </div>
       </div>
+      <div class="panel" id="yedekPanel" style="margin-top:14px;max-width:540px"></div>
       <div class="panel" id="cloudPanel" style="margin-top:14px;max-width:540px"></div>
       <div class="panel" id="cesitPanel" style="margin-top:14px;max-width:760px"></div>
       <div class="panel" id="lisansPanel" style="margin-top:14px;max-width:540px"></div>
@@ -622,6 +623,50 @@
       }
     }
     renderCloud();
+    renderYedekler();
+
+    // Otomatik yedekler — buluttan BAĞIMSIZ güvenlik ağı.
+    // 01.08.2026: Pantry tamamen çöktü, verinin tek erişilebilir kopyası tek cihazdaydı.
+    // Masaüstünde günlük dosya yedekleri (Belgeler/TIYS/yedek/), her yerde sıkıştırılmış
+    // cihaz-içi yedek. İkisi de burada listeleniyor ve geri yüklenebiliyor.
+    function renderYedekler() {
+      const p = view.querySelector("#yedekPanel"); if (!p) return;
+      const dosyaYedek = (window.tiysFS && window.tiysFS.yedekler) ? (window.tiysFS.yedekler() || []) : [];
+      const yerelYedek = (window.DB && DB.yedekListesi) ? DB.yedekListesi() : [];
+      const kb = n => Math.max(1, Math.round((n || 0) / 1024)) + " KB";
+      let html = `<h3>🛟 Otomatik Yedekler</h3>
+        <p class="lead" style="margin-top:0">Program bunları kendiliğinden alır — buluta veya internete ihtiyaç yok. Bir şey silinirse/bozulursa buradan geri dönebilirsin.</p>`;
+      if (dosyaYedek.length) {
+        html += `<div style="font-size:12px;color:var(--muted,#64748b);margin:10px 0 6px;font-weight:600">GÜNLÜK DOSYA YEDEKLERİ (bilgisayarda)</div>`;
+        html += dosyaYedek.map(y => `<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--line,#e5e7eb);border-radius:8px;margin-bottom:6px">
+          <div style="flex:1"><b style="font-size:13px">${y.ad.replace("veri-", "").replace(".json", "")}</b>
+          <span style="font-size:11px;color:var(--muted,#64748b);margin-left:6px">${kb(y.boyut)}</span></div>
+          <button class="btn ghost" style="padding:4px 10px;font-size:12px" data-dosya="${y.ad}">↩ Geri Yükle</button></div>`).join("");
+      }
+      if (yerelYedek.length) {
+        html += `<div style="font-size:12px;color:var(--muted,#64748b);margin:12px 0 6px;font-weight:600">CİHAZ İÇİ YEDEKLER</div>`;
+        html += yerelYedek.map(y => `<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--line,#e5e7eb);border-radius:8px;margin-bottom:6px">
+          <div style="flex:1"><b style="font-size:13px">${y.tarih || "?"}</b>
+          <span style="font-size:11px;color:var(--muted,#64748b);margin-left:6px">${kb(y.boyut)}${y.z ? " · sıkıştırılmış" : ""}</span></div>
+          <button class="btn ghost" style="padding:4px 10px;font-size:12px" data-yerel="${y.ts}">↩ Geri Yükle</button></div>`).join("");
+      }
+      if (!dosyaYedek.length && !yerelYedek.length) {
+        html += `<p class="lead" style="font-size:12.5px">Henüz yedek yok — programı kullandıkça oluşur.</p>`;
+      }
+      p.innerHTML = html;
+
+      const geriYukle = async (metin, etiket) => {
+        if (!metin) { Forms.toast("Yedek okunamadı"); return; }
+        if (!confirm(`${etiket} yedeğine dönülsün mü?\n\nŞu anki veri bununla DEĞİŞTİRİLECEK.\n(Önce mevcut hâlin de yedeği alınır.)`)) return;
+        try { await DB.otoYedekAl(); } catch (e) {}
+        if (DB.importJSON(metin)) { Forms.toast("Yedek geri yüklendi ✓"); FIYS.route(); }
+        else Forms.toast("Yedek bozuk — yüklenmedi");
+      };
+      p.querySelectorAll("[data-dosya]").forEach(b => b.onclick = () =>
+        geriYukle(window.tiysFS.yedekOku(b.dataset.dosya), b.dataset.dosya.replace("veri-", "").replace(".json", "")));
+      p.querySelectorAll("[data-yerel]").forEach(b => b.onclick = async () =>
+        geriYukle(await DB.yedekMetni(Number(b.dataset.yerel)), "Cihaz içi"));
+    }
 
     function renderCesitler() {
       const p = view.querySelector("#cesitPanel"); if (!p) return;
