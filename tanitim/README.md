@@ -3,7 +3,8 @@
 54 saniyelik, el çizimi kolaj tarzında tanıtım filmi. Görüntü, müzik ve efektlerin hepsi JavaScript ile üretilir; dışarıdan resim ya da müzik dosyası yoktur. Seslendirme Piper TTS (tr_TR-fahrettin-medium) ile üretildi.
 
 - `index.html` — tek dosyalık oynatıcı. Tarayıcıda açıp ▶'ye basmak yeterli (boşluk tuşu: durdur/devam).
-- `tiys-tanitim.mp4` — paylaşım için hazır video (1920×1080, 30 fps, -14 LUFS).
+- `tiys-tanitim.mp4` — yüksek kalite video (1920×1080, 30 fps, -14 LUFS, ~42 MB).
+- `tiys-tanitim-paylasim.mp4` — WhatsApp/sosyal medya için küçük sürüm (~12 MB).
 
 ## Düzenleme
 
