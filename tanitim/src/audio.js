@@ -34,14 +34,19 @@
     fadeTail(z, 0.03);
     return norm(z, o.peak ?? 0.9);
   }
+  // Hızlı sinüs: x[n+1] = 2·r·cos(w)·x[n] − r²·x[n−1]  (r: örnek başı sönüm)
+  function addSine(y, f, amp, decaySec, ph = 0) {
+    const w = 2 * Math.PI * f / SR, r = decaySec > 0 ? Math.exp(-1 / (SR * decaySec)) : 1, k = 2 * r * Math.cos(w), r2 = r * r;
+    let x1 = amp * Math.sin(ph - w) / r, x0 = amp * Math.sin(ph);
+    for (let i = 0; i < y.length; i++) { y[i] += x0; const nx = k * x0 - r2 * x1; x1 = x0; x0 = nx; }
+  }
   // Metalofon / çan: inharmonik kısmi sesler
   function bell(freq, dur, o = {}) {
     const n = Math.floor(SR * dur), y = new Float32Array(n);
     const parts = o.parts || [[1, 1, 1.4], [2.756, 0.38, 0.5], [5.404, 0.16, 0.22], [8.933, 0.06, 0.1]];
     for (const [r, a, d] of parts) {
       const f = freq * r; if (f > SR / 2.2) continue;
-      const w = 2 * Math.PI * f / SR, ph = rnd() * 6.28;
-      for (let i = 0; i < n; i++) y[i] += a * Math.sin(w * i + ph) * Math.exp(-i / (SR * d * (o.decay ?? 1)));
+      addSine(y, f, a, d * (o.decay ?? 1), rnd() * 6.28);
     }
     for (let i = 0; i < Math.min(n, 96); i++) y[i] *= i / 96;
     fadeTail(y, 0.05);
@@ -52,8 +57,8 @@
     const n = Math.floor(SR * dur), y = new Float32Array(n);
     const parts = [[1, 1, 0.42], [3.99, 0.22, 0.09], [10.6, 0.06, 0.03]];
     for (const [r, a, d] of parts) {
-      const f = freq * r; if (f > SR / 2.2) continue; const w = 2 * Math.PI * f / SR;
-      for (let i = 0; i < n; i++) y[i] += a * Math.sin(w * i) * Math.exp(-i / (SR * d * (o.decay ?? 1)));
+      const f = freq * r; if (f > SR / 2.2) continue;
+      addSine(y, f, a, d * (o.decay ?? 1), 0);
     }
     for (let i = 0; i < Math.min(n, 48); i++) y[i] *= i / 48;
     fadeTail(y, 0.03);
@@ -134,8 +139,8 @@
   function pad(midis, dur) {
     const n = Math.floor(SR * dur), y = new Float32Array(n);
     for (const m of midis) for (const det of [-0.08, 0.08]) {
-      const f = mtof(m + det), w = 2 * Math.PI * f / SR, ph = rnd() * 6;
-      for (let i = 0; i < n; i++) { const p = w * i + ph; y[i] += Math.sin(p) + 0.25 * Math.sin(2 * p) + 0.1 * Math.sin(3 * p); }
+      const f = mtof(m + det), ph = rnd() * 6;
+      addSine(y, f, 1, 0, ph); addSine(y, 2 * f, 0.25, 0, 2 * ph); addSine(y, 3 * f, 0.1, 0, 3 * ph);
     }
     for (let i = 0; i < n; i++) { const t = i / SR; y[i] *= Math.min(1, t / 0.5) * Math.min(1, (dur - t) / 0.6); }
     return norm(y, 0.7);
@@ -181,15 +186,17 @@
   function norm(y, peak) { let m = 0; for (let i = 0; i < y.length; i++) m = Math.max(m, Math.abs(y[i])); if (m > 0) { const k = peak / m; for (let i = 0; i < y.length; i++) y[i] *= k; } return y; }
   function fadeTail(y, sec) { const k = Math.min(y.length, Math.floor(SR * sec)); for (let i = 0; i < k; i++) y[y.length - 1 - i] *= i / k; }
   function biq(type, f, q) { // RBJ biquad katsayıları
-    const w = 2 * Math.PI * f / SR, c = Math.cos(w), s = Math.sin(w), al = s / (2 * q);
+    const w = 2 * Math.PI * f / SR, c = Math.cos(w), s = Math.sin(w); let al = s / (2 * (Array.isArray(q) ? q[0] : q));
     let b0, b1, b2, a0, a1, a2;
     if (type === "lp") { b0 = (1 - c) / 2; b1 = 1 - c; b2 = (1 - c) / 2; }
     else if (type === "hp") { b0 = (1 + c) / 2; b1 = -(1 + c); b2 = (1 + c) / 2; }
+    else if (type === "peak") { const A = Math.pow(10, q[1] / 40); al = s / (2 * q[0]); b0 = 1 + al * A; b1 = -2 * c; b2 = 1 - al * A; a0 = 1 + al / A; a1 = -2 * c; a2 = 1 - al / A; return [b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0]; }
     else { b0 = al; b1 = 0; b2 = -al; }
     a0 = 1 + al; a1 = -2 * c; a2 = 1 - al;
     return [b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0];
   }
-  function filt(y, type, f, q) {
+  const filt = (y, type, f, q) => filtF(y, type, f, q);
+  function filtF(y, type, f, q) {
     const [b0, b1, b2, a1, a2] = biq(type, f, q); let x1 = 0, x2 = 0, y1 = 0, y2 = 0; const o = new Float32Array(y.length);
     for (let i = 0; i < y.length; i++) { const x = y[i], v = b0 * x + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2; x2 = x1; x1 = x; y2 = y1; y1 = v; o[i] = v; }
     return o;
@@ -201,6 +208,24 @@
       const x = y[i], v = K[0] * x + K[1] * x1 + K[2] * x2 - K[3] * y1 - K[4] * y2; x2 = x1; x1 = x; y2 = y1; y1 = v; o[i] = v;
     }
     return o;
+  }
+  // Freeverb (Jezar): 8 tarak + 4 tüm-geçiren, stereo yayılım
+  const WET = 3.2;
+  function freeverb(inp, room, damp) {
+    const sc = SR / 44100, combs = [1116, 1188, 1277, 1356, 1422, 1491, 1557, 1617], aps = [556, 441, 341, 225], n = inp.length;
+    const ch = spread => {
+      const out = new Float32Array(n);
+      const cb = combs.map(c => ({ b: new Float32Array(Math.round((c + spread) * sc)), i: 0, f: 0 }));
+      const ab = aps.map(c => ({ b: new Float32Array(Math.round((c + spread) * sc)), i: 0 }));
+      for (let k = 0; k < n; k++) {
+        const x = inp[k] * 0.015; let y = 0;
+        for (const c of cb) { const o = c.b[c.i]; c.f = o * (1 - damp) + c.f * damp; c.b[c.i] = x + c.f * room; if (++c.i >= c.b.length) c.i = 0; y += o; }
+        for (const a of ab) { const bo = a.b[a.i]; const o = -y + bo; a.b[a.i] = y + bo * 0.5; if (++a.i >= a.b.length) a.i = 0; y = o; }
+        out[k] = y;
+      }
+      return out;
+    };
+    return [ch(0), ch(23)];
   }
   function impulse(ctx, dur, decay) {
     const n = Math.floor(SR * dur), b = ctx.createBuffer(2, n, SR);
@@ -237,55 +262,20 @@
 
   async function renderMix(voBuffers, opts = {}) {
     seed = 1234567;
-    const ctx = new OfflineAudioContext(2, Math.ceil(SR * DUR), SR);
-    const master = ctx.createGain(); master.gain.value = 1;
-    const comp = ctx.createDynamicsCompressor();
-    comp.threshold.value = -14; comp.knee.value = 8; comp.ratio.value = 3; comp.attack.value = 0.006; comp.release.value = 0.18;
-    master.connect(comp); comp.connect(ctx.destination);
-
-    const music = ctx.createGain(); music.gain.value = opts.noMusic ? 0 : 1; music.connect(master);
-    const sfx = ctx.createGain(); sfx.gain.value = opts.noSfx ? 0 : 0.9; sfx.connect(master);
-    const vo = ctx.createGain(); vo.gain.value = opts.noVo ? 0 : 1.0;
-    // VO kanalı: hafif oda + doğrudan
-    vo.connect(master);
-    const verb = ctx.createConvolver(); verb.buffer = impulse(ctx, 2.6, 0.7);
-    const verbOut = ctx.createGain(); verbOut.gain.value = 0.55; verb.connect(verbOut); verbOut.connect(music);
-    const roomVO = ctx.createConvolver(); roomVO.buffer = impulse(ctx, 0.6, 0.12);
-    const roomG = ctx.createGain(); roomG.gain.value = 0.07; vo.connect(roomVO); roomVO.connect(roomG); roomG.connect(master);
-    // müzik "body" EQ
-    const mLow = ctx.createBiquadFilter(); mLow.type = "highpass"; mLow.frequency.value = 35;
-    const mDip = ctx.createBiquadFilter(); mDip.type = "peaking"; mDip.frequency.value = 2500; mDip.Q.value = 0.8; mDip.gain.value = -2.5; // VO'ya yer aç
-    mLow.connect(mDip); mDip.connect(music);
-    const mus = mLow;
-
-    // seslendirme altında müziği kıs (ducking)
-    const DUCK = 0.5;
-    const mg = music.gain;
-    if (!opts.noMusic) {
-      mg.setValueAtTime(1, 0);
-      for (const [id, st] of VO) {
-        const b = voBuffers && voBuffers[id]; if (!b) continue;
-        const en = st + b.duration;
-        mg.setTargetAtTime(DUCK, st - 0.12, 0.06);
-        mg.setTargetAtTime(1, en + 0.05, 0.18);
-      }
-    }
-
+    // Hız için miks doğrudan JS dizilerinde toplanır; Web Audio yalnız yankı ve kompresör için kullanılır.
+    const N = Math.ceil(SR * DUR);
+    const musL = new Float32Array(N), musR = new Float32Array(N), sfxL = new Float32Array(N), sfxR = new Float32Array(N), send = new Float32Array(N);
+    const mus = "mus", sfx = "sfx";
+    const FT = { lowpass: "lp", highpass: "hp", bandpass: "bp" };
     const cache = new Map();
-    function buf(key, fn) {
-      if (!cache.has(key)) { const d = fn(); const b = ctx.createBuffer(1, d.length, SR); b.copyToChannel(d, 0); cache.set(key, b); }
-      return cache.get(key);
-    }
-    function play(b, t, gain, pan, dest, send, rate, filt) {
+    function buf(key, fn) { if (!cache.has(key)) cache.set(key, fn()); return cache.get(key); }
+    function play(b, t, gain, pan, dest, snd, rate, filt) {
       if (t < 0 || t > DUR) return;
-      const s = ctx.createBufferSource(); s.buffer = b; if (rate) s.playbackRate.value = rate;
-      const gn = ctx.createGain(); gn.gain.value = gain;
-      const p = ctx.createStereoPanner(); p.pan.value = pan || 0;
-      let head = s;
-      if (filt) { const f = ctx.createBiquadFilter(); f.type = filt[0]; f.frequency.value = filt[1]; f.Q.value = filt[2] || 0.7; s.connect(f); head = f; }
-      head.connect(gn); gn.connect(p); p.connect(dest);
-      if (send) { const sg = ctx.createGain(); sg.gain.value = send; p.connect(sg); sg.connect(verb); }
-      s.start(t);
+      if (filt) { const k = b; const fk = filt.join("|"); if (!k.__f) k.__f = {}; if (!k.__f[fk]) k.__f[fk] = filtF(k, FT[filt[0]], filt[1], filt[2] || 0.7); b = k.__f[fk]; }
+      const p = Math.max(-1, Math.min(1, pan || 0)), gl = gain * Math.cos((p + 1) * Math.PI / 4) * Math.SQRT2, gr = gain * Math.sin((p + 1) * Math.PI / 4) * Math.SQRT2;
+      const L = dest === sfx ? sfxL : musL, R = dest === sfx ? sfxR : musR, st = Math.round(t * SR), n = Math.min(b.length, N - st);
+      for (let i = 0; i < n; i++) { const v = b[i]; L[st + i] += v * gl; R[st + i] += v * gr; }
+      if (snd) { const sg = gain * snd; for (let i = 0; i < n; i++) send[st + i] += b[i] * sg; }
     }
     const B = (bar, beat) => bar * BAR + beat * BEAT;
 
@@ -394,18 +384,43 @@
 
     // ---------- efektler ----------
     for (const [t, type, gn, x] of SFX) {
-      const key = "sfx" + type + (x || "");
-      const b = buf(key, () => sfxBuf(type, type === "scribble" ? x : x));
+      const b = buf("sfx" + type + (x || ""), () => sfxBuf(type, x));
       play(b, t, gn, (rnd() - 0.5) * 0.5, sfx, type === "ding" || type === "sparkle" || type === "boing" ? 0.25 : 0.06);
     }
     // ---------- seslendirme ----------
-    if (voBuffers) for (const [id, st] of VO) { const b = voBuffers[id]; if (!b) continue; const s = ctx.createBufferSource(); s.buffer = b; s.connect(vo); s.start(st); }
+    const voL = new Float32Array(N);
+    if (voBuffers) for (const [id, st] of VO) { const b = voBuffers[id]; if (!b) continue; const d = b.getChannelData(0), o = Math.round(st * SR), n = Math.min(d.length, N - o); for (let i = 0; i < n; i++) voL[o + i] += d[i]; }
 
-    const out = await ctx.startRendering();
-    // tepe normalizasyonu -1 dBFS
-    let m = 0; for (let c = 0; c < 2; c++) { const d = out.getChannelData(c); for (let i = 0; i < d.length; i++) m = Math.max(m, Math.abs(d[i])); }
-    const k = m > 0 ? 0.89 / m : 1; for (let c = 0; c < 2; c++) { const d = out.getChannelData(c); for (let i = 0; i < d.length; i++) d[i] *= k; }
-    // son 0.4 sn yumuşak kapanış
+    // ---------- yankılar (JS Freeverb + seslendirme için kısa oda yansımaları) ----------
+    const [wL, wR] = freeverb(send, 0.86, 0.35);
+    const rL = new Float32Array(N), rR = new Float32Array(N);
+    [[0.007, 0.5, 0.3], [0.013, 0.3, 0.45], [0.019, 0.38, 0.22], [0.029, 0.18, 0.26], [0.041, 0.14, 0.1]].forEach(([d, gl, gr]) => { const o = Math.round(d * SR); for (let i = o; i < N; i++) { rL[i] += voL[i - o] * gl; rR[i] += voL[i - o] * gr; } });
+    const rLf = filtF(rL, "lp", 3500, 0.7), rRf = filtF(rR, "lp", 3500, 0.7);
+
+    // ---------- müzik veriyolu: yankı + EQ + seslendirme altında kısma ----------
+    for (let i = 0; i < N; i++) { musL[i] += wL[i] * WET; musR[i] += wR[i] * WET; }
+    let mL = filtF(filtF(musL, "hp", 35, 0.7), "peak", 2500, [0.8, -2.5]), mR = filtF(filtF(musR, "hp", 35, 0.7), "peak", 2500, [0.8, -2.5]);
+    const duck = new Float32Array(N).fill(1), DUCK = 0.3;
+    if (voBuffers) for (const [id, st] of VO) { const b = voBuffers[id]; if (!b) continue; const a = Math.max(0, Math.round((st - 0.12) * SR)), e = Math.min(N, Math.round((st + b.duration + 0.05) * SR)); for (let i = a; i < e; i++) duck[i] = DUCK; }
+    let g = 1; for (let i = 0; i < N; i++) { const tgt = duck[i], tc = tgt < g ? 0.06 : 0.18; g += (tgt - g) * (1 - Math.exp(-1 / (SR * tc))); duck[i] = g; }
+
+    // ---------- toplama + kompresör ----------
+    const gm = opts.noMusic ? 0 : 0.8, gs = opts.noSfx ? 0 : 0.75, gv = opts.noVo ? 0 : 1;
+    const outL = new Float32Array(N), outR = new Float32Array(N);
+    for (let i = 0; i < N; i++) {
+      outL[i] = gm * mL[i] * duck[i] + gs * sfxL[i] + gv * (voL[i] + rLf[i] * 0.12);
+      outR[i] = gm * mR[i] * duck[i] + gs * sfxR[i] + gv * (voL[i] + rRf[i] * 0.12);
+    }
+    const oc3 = new OfflineAudioContext(2, N, SR);
+    const ib = oc3.createBuffer(2, N, SR); ib.copyToChannel(outL, 0); ib.copyToChannel(outR, 1);
+    const is = oc3.createBufferSource(); is.buffer = ib;
+    const comp = oc3.createDynamicsCompressor(); comp.threshold.value = -14; comp.knee.value = 8; comp.ratio.value = 3; comp.attack.value = 0.006; comp.release.value = 0.18;
+    is.connect(comp); comp.connect(oc3.destination); is.start(0);
+    const out = await oc3.startRendering();
+    if (opts.norm !== false) {
+      let m = 0; for (let c = 0; c < 2; c++) { const d = out.getChannelData(c); for (let i = 0; i < d.length; i++) m = Math.max(m, Math.abs(d[i])); }
+      const k = m > 0 ? 0.89 / m : 1; for (let c = 0; c < 2; c++) { const d = out.getChannelData(c); for (let i = 0; i < d.length; i++) d[i] *= k; }
+    }
     for (let c = 0; c < 2; c++) { const d = out.getChannelData(c), n = Math.floor(SR * 0.4); for (let i = 0; i < n; i++) d[d.length - 1 - i] *= i / n; }
     return out;
   }

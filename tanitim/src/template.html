@@ -25,10 +25,6 @@ canvas{width:100%;height:100%;display:block;background:#f3ead3}
   <div id="ov"><div id="play"><svg viewBox="0 0 10 12"><path d="M0 0L10 6L0 12Z" fill="#164c3f"/></svg></div><div id="msg">TİYS tanıtım filmini izle</div></div>
   <div id="bar"></div>
 </div>
-<script>
-// Ayarlar: alan adını buraya yazın ya da ?domain=ornek.com ile verin (boşsa kapanışta platformlar yazılır)
-window.TIYS_CFG = { domain: new URLSearchParams(location.search).get("domain") || "" };
-</script>
 <script>/*__VO__*/</script>
 <script>/*__TIMELINE__*/</script>
 <script>/*__AUDIO__*/</script>
@@ -49,13 +45,15 @@ window.TIYS_CFG = { domain: new URLSearchParams(location.search).get("domain") |
   };
   const q = new URLSearchParams(location.search);
   if (q.has("export")) { cv.width = 1920; cv.height = 1080; ov.remove(); return; }
-  document.fonts.ready.then(() => { fit(); TiysAnim.drawFrame(cx, q.has("t") ? +q.get("t") : 12.2); });
+  document.fonts.ready.then(() => { fit(); TiysAnim.drawFrame(cx, q.has("t") ? +q.get("t") : 52); });
+  // ses, sayfa açılır açılmaz arka planda hazırlanır (kullanıcı tıklamasını beklemeden)
+  const mixReady = window.__tiys.fontsReady().then(async () => { const oc = new OfflineAudioContext(1, 1, 48000); return TiysAudio.renderMix(await decodeVO(oc)); });
   window.addEventListener("resize", () => { fit(); if (!playing) TiysAnim.drawFrame(cx, last); });
   let ac = null, mix = null, src = null, t0 = 0, playing = false, last = 0, offset = 0;
   async function start() {
     if (!ac) { ac = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 }); }
     if (ac.state === "suspended") await ac.resume();
-    if (!mix) { msg.textContent = "hazırlanıyor…"; await window.__tiys.fontsReady(); const vo = await decodeVO(ac); mix = await TiysAudio.renderMix(vo); }
+    if (!mix) { msg.textContent = "hazırlanıyor…"; mix = await mixReady; }
     ov.classList.add("hide");
     src = ac.createBufferSource(); src.buffer = mix; src.connect(ac.destination);
     t0 = ac.currentTime + 0.05 - offset; src.start(t0 + offset, offset); playing = true;

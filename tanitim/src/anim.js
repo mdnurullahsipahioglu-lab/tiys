@@ -2,7 +2,6 @@
 (function (g) {
   "use strict";
   const W = 1920, H = 1080;
-  const CFG = g.TIYS_CFG || {};
   const P = {
     cream: "#f3ead3", paper: "#fffaf0", ink: "#2a221d", ink2: "#4a3d33",
     kraft: "#c8a273", kraftD: "#a8834f",
@@ -346,14 +345,19 @@
   }
   function stamp(x, y, s, rot, label, c = P.red, w = 520, h = 150, fs = 92) {
     if (s <= 0.01) return;
-    ctx.save(); ctx.translate(x, y); ctx.rotate(rot); ctx.scale(s, s);
-    ctx.globalAlpha *= 0.9; ctx.strokeStyle = c; ctx.lineWidth = 12;
-    const r = 18; ctx.beginPath(); ctx.roundRect(-w / 2, -h / 2, w, h, r); ctx.stroke();
-    ctx.lineWidth = 4; ctx.beginPath(); ctx.roundRect(-w / 2 + 16, -h / 2 + 16, w - 32, h - 32, 10); ctx.stroke();
-    ctx.fillStyle = c; ctx.font = `900 ${fs}px ${FONTS.rubik}`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(label, 0, 6);
-    // mürekkep boşlukları
-    ctx.globalCompositeOperation = "destination-out"; ctx.globalAlpha = 0.85;
-    const pat = ctx.createPattern(TEX.grain, "repeat"); ctx.fillStyle = pat; ctx.fillRect(-w / 2 - 10, -h / 2 - 10, w + 20, h + 20);
+    // damga ayrı katmanda hazırlanır; mürekkep boşlukları yalnız damgayı deler
+    const img = cached(`stamp${label}|${c}|${w}|${h}|${fs}`, () => {
+      const cv = mkCanvas(w + 40, h + 40), x = cv.getContext("2d");
+      x.translate((w + 40) / 2, (h + 40) / 2); x.strokeStyle = c; x.lineWidth = 12;
+      x.beginPath(); x.roundRect(-w / 2, -h / 2, w, h, 18); x.stroke();
+      x.lineWidth = 4; x.beginPath(); x.roundRect(-w / 2 + 16, -h / 2 + 16, w - 32, h - 32, 10); x.stroke();
+      x.fillStyle = c; x.font = `900 ${fs}px ${FONTS.rubik}`; x.textAlign = "center"; x.textBaseline = "middle"; x.fillText(label, 0, 6);
+      x.setTransform(1, 0, 0, 1, 0, 0); x.globalCompositeOperation = "destination-out"; x.globalAlpha = 0.85;
+      for (let yy = 0; yy < h + 40; yy += 512) for (let xx = 0; xx < w + 40; xx += 512) x.drawImage(TEX.grain, xx, yy);
+      return cv;
+    });
+    ctx.save(); ctx.translate(x, y); ctx.rotate(rot); ctx.scale(s, s); ctx.globalAlpha *= 0.92;
+    ctx.drawImage(img, -img.width / 2, -img.height / 2);
     ctx.restore();
   }
   function phone(x, y, s, rot, screen) {
@@ -757,7 +761,8 @@
   function s7() {
     bg(P.green, "green");
     ctx.save(); ctx.globalAlpha = 0.08; for (let i = 0; i < 14; i++) { const x = hr(i + 40) * W, y = hr(i + 60) * H; ctx.save(); ctx.translate(x, y + Math.sin(T + i) * 8); ctx.rotate(i); ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.ellipse(0, 0, 40, 46, 0, 0, 7); ctx.fill(); ctx.restore(); } ctx.restore();
-    logo(960, 270, 0.68, [48.1, 48.18, 48.26, 48.34]);
+    logo(960, 235, 0.68, [48.1, 48.18, 48.26, 48.34]);
+    text("Tarım İşletme Yönetim Sistemi", 960, 400, { size: 54, font: FONTS.print, weight: 400, align: "center", color: P.yellow, start: 48.4, dur: 0.6, id: 162 });
     // damga
     const ks = seg(T, 49.0, 49.15), sc = T < 49.0 ? 0 : lerp(2.4, 1, eIn(ks)) + (T > 49.15 ? Math.sin((T - 49.15) * 30) * Math.exp(-(T - 49.15) * 9) * 0.04 : 0);
     { const kp = eBack(seg(T, 48.55, 48.95)); if (kp > 0) { ctx.save(); ctx.translate(960, 600); ctx.rotate(0.015); ctx.scale(kp, kp); cut(tornRect(1060, 250, 2490, 5), { fill: P.paper, lift: 1.5 }); tape(-470, -110, 160, -0.6, 1, 2); tape(470, -112, 160, 0.6, 1, 6); ctx.restore(); } }
@@ -765,9 +770,7 @@
     // dene etiketi
     const kb = eBack(seg(T, 50.35, 50.7));
     if (kb > 0) { ctx.save(); ctx.translate(960, 845); ctx.rotate(0.02); ctx.scale(kb, kb); cut(tornRect(520, 120, 2501, 3.5), { fill: P.yellow, lift: 1.4 }); text("Hemen dene  →", 0, 30, { size: 84, align: "center", color: P.green, id: 160 }); ctx.restore(); }
-    const dom = CFG.domain;
-    if (dom) text(dom, 960, 1000, { size: 72, align: "center", color: "#fbf6ea", start: 50.6, dur: 0.6, id: 161, font: FONTS.print, weight: 400 });
-    else text("Telefon · Bilgisayar · Web", 960, 1000, { size: 58, align: "center", color: "rgba(251,246,234,0.85)", start: 50.6, dur: 0.6, id: 161, font: FONTS.print, weight: 400 });
+    text("Telefon · Bilgisayar · Web", 960, 1000, { size: 58, align: "center", color: "rgba(251,246,234,0.85)", start: 50.6, dur: 0.6, id: 161, font: FONTS.print, weight: 400 });
     const up = eBack(seg(T, 48.3, 48.75));
     mascot({ x: 1650, y: 1300 - up * 470, s: 0.9, rot: 0.06, mouth: "grin", armL: -1.1, waveL: Math.sin(T * 9) * 0.25, armR: 0.5, blink: T > 50.5 && T < 50.9 });
     confetti(50.4, 80, 960, 640, 9, 1.4);
