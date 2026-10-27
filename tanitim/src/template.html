@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TİYS Tanıtım Filmi</title>
+<style>
+/*__FONTS__*/
+:root{--bg:#0e2a23;--ink:#fbf6ea;--acc:#f5c842}
+html,body{margin:0;height:100%;background:var(--bg);overflow:hidden}
+body{display:flex;align-items:center;justify-content:center;font-family:'Caveat',cursive;color:var(--ink)}
+#stage{position:relative;width:min(100vw,177.78vh);height:min(56.25vw,100vh);box-shadow:0 20px 60px rgba(0,0,0,.45)}
+canvas{width:100%;height:100%;display:block;background:#f3ead3}
+#ov{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2vh;background:rgba(14,42,35,.55);cursor:pointer;transition:opacity .4s}
+#ov.hide{opacity:0;pointer-events:none}
+#play{width:min(16vw,150px);height:min(16vw,150px);border-radius:50%;background:var(--acc);display:flex;align-items:center;justify-content:center;box-shadow:0 8px 0 #c79a1d,0 14px 30px rgba(0,0,0,.35);transform:rotate(-4deg)}
+#play svg{width:42%;margin-left:8%}
+#msg{font-size:clamp(22px,3.4vw,44px);font-weight:700;text-shadow:0 2px 0 rgba(0,0,0,.3)}
+#bar{position:absolute;left:0;bottom:0;height:5px;background:var(--acc);width:0}
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="c" width="1920" height="1080"></canvas>
+  <div id="ov"><div id="play"><svg viewBox="0 0 10 12"><path d="M0 0L10 6L0 12Z" fill="#164c3f"/></svg></div><div id="msg">TİYS tanıtım filmini izle</div></div>
+  <div id="bar"></div>
+</div>
+<script>/*__VO__*/</script>
+<script>/*__TIMELINE__*/</script>
+<script>/*__AUDIO__*/</script>
+<script>/*__ANIM__*/</script>
+<script>
+(function () {
+  "use strict";
+  const cv = document.getElementById("c"), cx = cv.getContext("2d"), ov = document.getElementById("ov"), msg = document.getElementById("msg"), bar = document.getElementById("bar");
+  const DUR = TL.DUR;
+  function b64(s) { const bin = atob(s), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u.buffer; }
+  async function decodeVO(ac) { const o = {}; for (const k in VO_DATA) o[k] = await ac.decodeAudioData(b64(VO_DATA[k])); return o; }
+  function fit() { const r = cv.getBoundingClientRect(), d = Math.min(2, window.devicePixelRatio || 1); const w = Math.round(r.width * d), h = Math.round(r.height * d); if (w && (cv.width !== w)) { cv.width = Math.min(w, 1920); cv.height = Math.round(cv.width * 9 / 16); } }
+  // dışa aktarma için kancalar (Playwright)
+  window.__tiys = {
+    draw: t => TiysAnim.drawFrame(cx, t),
+    mixWav: async (opts) => { const oc = new OfflineAudioContext(1, 1, 48000); const vo = await decodeVO(oc); const ab = await TiysAudio.renderMix(vo, opts); const w = TiysAudio.toWav(ab); let s = ""; const u = new Uint8Array(w); for (let i = 0; i < u.length; i += 32768) s += String.fromCharCode.apply(null, u.subarray(i, i + 32768)); return btoa(s); },
+    fontsReady: () => document.fonts.ready.then(() => Promise.all(["700 40px Caveat", "40px 'Caveat Brush'", "40px 'Patrick Hand'", "40px 'Alfa Slab One'", "900 40px Rubik"].map(f => document.fonts.load(f, "İşçğüöı₺")))).then(() => true)
+  };
+  const q = new URLSearchParams(location.search);
+  if (q.has("export")) { cv.width = 1920; cv.height = 1080; ov.remove(); return; }
+  document.fonts.ready.then(() => { fit(); TiysAnim.drawFrame(cx, q.has("t") ? +q.get("t") : 52); });
+  // ses, sayfa açılır açılmaz arka planda hazırlanır (kullanıcı tıklamasını beklemeden)
+  const mixReady = window.__tiys.fontsReady().then(async () => { const oc = new OfflineAudioContext(1, 1, 48000); return TiysAudio.renderMix(await decodeVO(oc)); });
+  window.addEventListener("resize", () => { fit(); if (!playing) TiysAnim.drawFrame(cx, last); });
+  let ac = null, mix = null, src = null, t0 = 0, playing = false, last = 0, offset = 0;
+  async function start() {
+    if (!ac) { ac = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 }); }
+    if (ac.state === "suspended") await ac.resume();
+    if (!mix) { msg.textContent = "hazırlanıyor…"; mix = await mixReady; }
+    ov.classList.add("hide");
+    src = ac.createBufferSource(); src.buffer = mix; src.connect(ac.destination);
+    t0 = ac.currentTime + 0.05 - offset; src.start(t0 + offset, offset); playing = true;
+    src.onended = () => { if (playing && ac.currentTime - t0 >= DUR - 0.1) { playing = false; offset = 0; msg.textContent = "Tekrar izle"; ov.classList.remove("hide"); } };
+    requestAnimationFrame(loop);
+  }
+  function pause() { if (!playing) return; playing = false; offset = Math.min(DUR, ac.currentTime - t0); src.onended = null; src.stop(); msg.textContent = "Devam et"; ov.classList.remove("hide"); }
+  function loop() { if (!playing) return; last = Math.min(DUR, Math.max(0, ac.currentTime - t0)); TiysAnim.drawFrame(cx, last); bar.style.width = (last / DUR * 100) + "%"; if (last < DUR) requestAnimationFrame(loop); }
+  ov.addEventListener("click", start);
+  cv.addEventListener("click", pause);
+  window.addEventListener("keydown", e => { if (e.code === "Space") { e.preventDefault(); playing ? pause() : start(); } });
+})();
+</script>
+</body>
+</html>
